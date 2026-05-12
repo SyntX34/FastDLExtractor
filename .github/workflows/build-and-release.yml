@@ -1,0 +1,125 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number for the release (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+      prerelease:
+        description: 'Mark as prerelease'
+        required: false
+        default: 'false'
+
+env:
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ build-essential libbz2-dev nlohmann-json3-dev
+
+      - name: Configure CMake
+        run: |
+          mkdir build-linux
+          cd build-linux
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cd build-linux
+          make -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastdl-tool-linux
+          path: build-linux/FastDLTool
+          retention-days: 7
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install vcpkg and dependencies
+        run: |
+          git clone --depth=1 https://github.com/Microsoft/vcpkg.git
+          cd vcpkg
+          .\bootstrap-vcpkg.bat -disableMetrics
+          .\vcpkg integrate install
+          .\vcpkg install bzip2:x64-windows --classic --recurse
+          .\vcpkg install nlohmann-json:x64-windows --classic --recurse
+        shell: pwsh
+
+      - name: Configure CMake
+        run: |
+          mkdir build-windows
+          cd build-windows
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+
+      - name: Build
+        run: |
+          cd build-windows
+          cmake --build . --config Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastdl-tool-windows
+          path: build-windows/Release/FastDLTool.exe
+          retention-days: 7
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fastdl-tool-linux
+          path: dist/linux
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fastdl-tool-windows
+          path: dist/windows
+
+      - name: Prepare release
+        run: |
+          cp dist/linux/FastDLTool FastDLTool-linux-x86_64
+          cp dist/windows/FastDLTool.exe FastDLTool-windows-x86_64.exe
+          chmod +x FastDLTool-linux-x86_64
+          echo "Release files prepared:"
+          ls -lah FastDLTool-*
+        shell: bash
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          files: |
+            FastDLTool-linux-x86_64
+            FastDLTool-windows-x86_64.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
