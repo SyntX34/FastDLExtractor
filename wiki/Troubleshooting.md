@@ -226,3 +226,67 @@ export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
 1. Check the existing [GitHub Issues](https://github.com/SyntX34/FastDLExtractor/issues)
 2. Include your OS, build method, and full error message when reporting issues
 3. Run with maximum verbosity if available
+
+---
+
+## Español
+
+### Errores de Configuración
+
+**"Config not found" al iniciar:**
+- Edite el archivo `configs/servers.json` generado automáticamente
+
+**Los archivos no se descargan:**
+- Verifique que la URL del FastDL es accesible
+- Asegúrese de que `resource_types` incluye las extensiones correctas
+
+### Errores de Compilación
+
+**Error bzip2 (Windows MinGW):**
+```bash
+pacman -S mingw-w64-x86_64-bzip2
+```
+
+---
+
+## 中文
+
+### 配置错误
+
+**配置文件未找到：**
+- 编辑 `configs/servers.json`
+
+### 下载错误
+
+**下载失败：**
+- 检查 FastDL URL 是否可访问
+- 确认 `resource_types` 包含正确的副檔名
+
+### 构建错误
+
+**bzip2 错误：**
+```bash
+# Windows: pacman -S mingw-w64-x86_64-bzip2
+# Linux: sudo apt install libbz2-dev
+```
+
+---
+
+## Русский
+
+### Ошибки конфигурации
+
+**"Config not found":**
+- Отредактируйте файл `configs/servers.json`
+
+### Ошибки загрузки
+
+**Загрузка не удалась:**
+- Проверьте доступность FastDL URL
+- Убедитесь в правильности путей
+
+---
+
+## License
+
+MIT License

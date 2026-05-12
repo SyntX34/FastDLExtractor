@@ -161,3 +161,109 @@ pacman -S mingw-w64-x86_64-bzip2
 1. Ensure Python 3.10+ is installed
 2. Run `pip install --upgrade PyQt6 pyinstaller`
 3. Check that the C++ library was built successfully first
+
+---
+
+## Русский (Russian)
+
+### Системные требования
+
+**Windows:**
+- CMake 3.16+
+- Visual Studio 2019/2022 с C++ или MinGW-w64 через MSYS2
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+```
+
+**macOS:**
+```bash
+brew install cmake bzip2 curl python
+```
+
+---
+
+## Deutsch
+
+### Systemanforderungen
+
+**Windows:**
+- CMake 3.16+
+- Visual Studio 2019/2022 mit C++ oder MinGW-w64 über MSYS2
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+```
+
+**macOS:**
+```bash
+brew install cmake bzip2 curl python
+```
+
+---
+
+## Français
+
+### Configuration requise
+
+**Windows:**
+- CMake 3.16+
+- Visual Studio 2019/2022 avec C++ ou MinGW-w64 via MSYS2
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+```
+
+**macOS:**
+```bash
+brew install cmake bzip2 curl python
+```
+
+---
+
+## Español
+
+### Requisitos del Sistema
+
+**Windows:**
+- CMake 3.16+
+- Visual Studio 2019/2022 con C++ o MinGW-w64 vía MSYS2
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+```
+
+**macOS:**
+```bash
+brew install cmake bzip2 curl python
+```
+
+---
+
+## 中文
+
+### 系统要求
+
+**Windows:**
+- CMake 3.16+
+- Visual Studio 2019/2022 或 MinGW-w64 通过 MSYS2
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+```
+
+**macOS:**
+```bash
+brew install cmake bzip2 curl python
+```
+
+---
+
+## License
+
+MIT License

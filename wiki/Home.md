@@ -4,9 +4,20 @@ Welcome to the FastDL Tool documentation wiki. This tool helps you sync game fil
 
 ## Available Languages
 
-- **[English](#english)** - Full documentation
-- **[Español](#español)** - Documentación en español
-- **[中文](#中文)** - 中文文档
+| Flag | Language | Link |
+|------|----------|------|
+| 🇬🇧 | **English** | [Full Documentation](#english) |
+| 🇪🇸 | **Español** | [Documentación en español](#español) |
+| 🇨🇳 | **中文** | [中文文档](#中文) |
+| 🇷🇺 | **Русский** | [Документация на русском](#русский) |
+| 🇩🇰 | **Dansk** | [Dansk dokumentation](#dansk) |
+| 🇩🇪 | **Deutsch** | [Deutsche Dokumentation](#deutsch) |
+| 🇫🇷 | **Français** | [Documentation française](#français) |
+| 🇵🇱 | **Polski** | [Dokumentacja po polsku](#polski) |
+| 🇵🇹 | **Português** | [Documentação em português](#português) |
+| 🇹🇷 | **Türkçe** | [Türkçe belgelendirme](#türkçe) |
+| 🇯🇵 | **日本語** | [日本語ドキュメント](#日本語) |
+| 🇰🇷 | **한국어** | [한국어 문서](#한국어) |
 
 ---
 
@@ -285,6 +296,245 @@ FastDLTool -s 0 -f
 **配置文件找不到：**
 - 首次運行會自動生成範例配置
 - 請編輯 `configs/servers.json` 填入您的伺服器信息
+
+---
+
+## Русский
+
+### Обзор
+
+FastDL Tool — кроссплатформенное приложение для синхронизации игровых файлов с FastDL сервера.
+
+### Особенности
+
+| Функция | Описание |
+|---------|---------|
+| **Умная синхронизация** | Сравнивает файлы сервера с локальными — скачивает только недостающие |
+| **Парсинг папок** | Рекурсивно сканирует и скачивает папки с сервера |
+| **Фильтр префиксов** | Скачивает только файлы с определенным префиксом (например, `maps/zm_*`) |
+| **Многопоточность** | Настраиваемые рабочие потоки (по умолчанию 4, максимум 16) |
+
+### Установка
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+### Использование
+
+```bash
+# Интерактивный режим
+FastDLTool
+
+# Использовать сервер 0
+FastDLTool -s 0
+
+# Принудительная загрузка заново
+FastDLTool -s 0 -f
+```
+
+---
+
+## Dansk
+
+### Oversigt
+
+FastDL Tool er et tværkørende CLI og GUI-program til synkronisering af spilfiler fra en FastDL-server.
+
+### Funktioner
+
+| Funktion | Beskrivelse |
+|----------|-------------|
+| **Smart sync** | Sammenligner serverens filer med lokale filer — downloader kun hvad der mangler |
+| **Mappe-scan** | Gennemløber og downloader mapper rekursivt fra FastDL-serveren |
+| **Præfiksfilter** | Download kun filer med bestemt præfiks (f.eks. `maps/zm_*`) |
+
+### Installation
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Deutsch
+
+### Übersicht
+
+FastDL Tool ist eine plattformübergreifende CLI- und GUI-Anwendung zum Synchronisieren von Spieldateien von einem FastDL-Server.
+
+### Funktionen
+
+| Funktion | Beschreibung |
+|----------|--------------|
+| **Intelligente Synchronisation** | Vergleicht Serverdateien mit lokalen Dateien — lädt nur fehlende herunter |
+| **Ordner-Durchsuchen** | Durchsucht und lädt Ordner rekursiv vom FastDL-Server |
+| **Präfixfilter** | Lädt nur Dateien mit bestimmtem Präfix herunter (z.B. `maps/zm_*`) |
+
+### Installation
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Français
+
+### Aperçu
+
+FastDL Tool est une application CLI et GUI multiplateforme pour synchroniser les fichiers de jeu depuis un serveur FastDL.
+
+### Fonctionnalités
+
+| Fonction | Description |
+|----------|-------------|
+| **Synchronisation intelligente** | Compare les fichiers serveur avec les fichiers locaux — ne télécharge que ce qui manque |
+| **Parcours de dossiers** | Liste et télécharge les dossiers de manière récursive depuis le serveur FastDL |
+| **Filtre de préfixe** | Télécharge uniquement les fichiers correspondant au préfixe (ex: `maps/zm_*`) |
+
+### Installation
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Polski
+
+### Przegląd
+
+FastDL Tool to wieloplatformowe narzędzie CLI i GUI do synchronizacji plików gry z serwera FastDL.
+
+### Funkcje
+
+| Funkcja | Opis |
+|---------|------|
+| **Inteligentna synchronizacja** | Porównuje pliki serwera z lokalnymi — pobiera tylko brakujące |
+| **Przeszukiwanie folderów** | Rekurencyjne przeszukiwanie i pobieranie folderów z serwera |
+| **Filtr prefiksów** | Pobiera tylko pliki z określonym prefiksem (np. `maps/zm_*`) |
+
+### Instalacja
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Português
+
+### Visão Geral
+
+FastDL Tool é um aplicativo CLI e GUI multiplataforma para sincronizar arquivos de jogos de um servidor FastDL.
+
+### Recursos
+
+| Recurso | Descrição |
+|---------|-----------|
+| **Sincronização inteligente** | Compara arquivos do servidor com arquivos locais — baixa apenas o que falta |
+| **Varredura de pastas** | Lista e baixa pastas recursivamente do servidor FastDL |
+| **Filtro de prefixo** | Baixa apenas arquivos com determinado prefixo (ex: `maps/zm_*`) |
+
+### Instalação
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Türkçe
+
+### Genel Bakış
+
+FastDL Tool, bir FastDL sunucusundan yerel oyun kurulumunuza oyun dosyalarını senkronize etmek için çapraz platform bir CLI ve GUI uygulamasıdır.
+
+### Özellikler
+
+| Özellik | Açıklama |
+|---------|----------|
+| **Akıllı senkronizasyon** | Sunucu dosyalarını yerel dosyalarla karşılaştırır — sadece eksik olanları indirir |
+| **Klasör tarama** | FastDL sunucusundan klasörleri tekrarlayarak tarar ve indirir |
+| **Önek filtresi** | Sadece belirli önekle başlayan dosyaları indirir (örn: `maps/zm_*`) |
+
+### Kurulum
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## 日本語
+
+### 概要
+
+FastDL Toolは、FastDLサーバーからローカルゲームインストールにゲームファイルを同期するためのクロスプラットフォームのCLIおよびGUIアプリケーションです。
+
+### 機能
+
+| 機能 | 説明 |
+|------|------|
+| **スマート同期** | サーバーファイルとローカルファイルを比較し、不足しているファイルのみをダウンロード |
+| **フォルダクロール** | FastDLサーバーからフォルダを再帰的にリストしダウンロード |
+| **プレフィックスフィルター** | 指定したプレフィックス（例：`maps/zm_*`）のファイルのみをダウンロード |
+
+### インストール
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## 한국어
+
+### 개요
+
+FastDL Tool은 FastDL 서버에서 로컬 게임 설치로 게임 파일을 동기화하기 위한 크로스 플랫폼 CLI 및 GUI 애플리케이션입니다.
+
+### 기능
+
+| 기능 | 설명 |
+|------|------|
+| **스마트 동기화** | 서버 파일과 로컬 파일을 비교하여 누락된 파일만 다운로드 |
+| **폴더 크롤링** | FastDL 서버에서 폴더를 재귀적으로 나열하고 다운로드 |
+| **접두사 필터** | 지정된 접두사(`maps/zm_*` 등)가 있는 파일만 다운로드 |
+
+### 설치
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
 
 ---
 

@@ -112,18 +112,8 @@ jobs:
              src/ConfigManager.cpp    src/ConfigManager.h \
              src/Utils.h src/ProgressBar.h \
              gui/src/
-          # C API bridge lives in the repo root (next to CMakeLists.txt)
-          # Use $GITHUB_WORKSPACE explicitly to avoid working-directory drift.
-          echo "  Workspace contents (root):" && ls "$GITHUB_WORKSPACE"
-          for f in fastdl_capi.cpp fastdl_capi.h; do
-            if [ -f "$GITHUB_WORKSPACE/$f" ]; then
-              cp "$GITHUB_WORKSPACE/$f" gui/src/
-            elif [ -f "$GITHUB_WORKSPACE/src/$f" ]; then
-              cp "$GITHUB_WORKSPACE/src/$f" gui/src/
-            else
-              echo "ERROR: cannot find $f in $GITHUB_WORKSPACE or $GITHUB_WORKSPACE/src/" && exit 1
-            fi
-          done
+          # C API bridge lives in src/ alongside the other backend sources
+          cp src/fastdl_capi.cpp src/fastdl_capi.h gui/src/
           cp -r third_party/nlohmann gui/third_party/
 
       - name: Build shared library
@@ -214,19 +204,9 @@ jobs:
           )) {
             Copy-Item "src\$f" "gui\src\$f"
           }
-          # C API bridge lives in the repo root (next to CMakeLists.txt)
-          # Use $env:GITHUB_WORKSPACE explicitly to avoid working-directory drift.
-          Write-Host "  Workspace contents (root):" ; Get-ChildItem $env:GITHUB_WORKSPACE
-          foreach ($f in @("fastdl_capi.cpp","fastdl_capi.h")) {
-            if (Test-Path "$env:GITHUB_WORKSPACE\$f") {
-              Copy-Item "$env:GITHUB_WORKSPACE\$f" "gui\src\$f"
-            } elseif (Test-Path "$env:GITHUB_WORKSPACE\src\$f") {
-              Copy-Item "$env:GITHUB_WORKSPACE\src\$f" "gui\src\$f"
-            } else {
-              Write-Host "ERROR: cannot find $f in $env:GITHUB_WORKSPACE or $env:GITHUB_WORKSPACE\src\"
-              exit 1
-            }
-          }
+          # C API bridge lives in src/ alongside the other backend sources
+          Copy-Item "src\fastdl_capi.cpp" "gui\src\fastdl_capi.cpp"
+          Copy-Item "src\fastdl_capi.h"   "gui\src\fastdl_capi.h"
           Copy-Item -Recurse -Force third_party\nlohmann gui\third_party\nlohmann
 
       - name: Build shared library (DLL)

@@ -1,5 +1,16 @@
 # Frequently Asked Questions
 
+## Table of Contents
+
+- [General Questions](#general-questions)
+- [Configuration Questions](#configuration-questions)
+- [Download Questions](#download-questions)
+- [Building Questions](#building-questions)
+- [Network Questions](#network-questions)
+- [Troubleshooting Questions](#troubleshooting-questions)
+
+---
+
 ## General Questions
 
 ### Q: What games are supported?
@@ -179,3 +190,42 @@ FastDLTool -s 0 -d materials/models/weapons/v_models/v_knife.mdl
 ### Q: Can I contribute translations?
 
 **A:** Yes! Pull requests for additional language documentation are welcome.
+
+---
+
+## Español
+
+### Preguntas Generales
+
+**¿Qué juegos son compatibles?**
+A: Cualquier juego Source Engine: CS:Source, CS:GO, Garry's Mod, TF2, L4D2, etc.
+
+**¿Cómo funciona el fallback .bz2?**
+A: Intenta `archivo.ext.bz2` primero, si 404 entonces `archivo.ext`.
+
+---
+
+## 中文
+
+### 常规问题
+
+**支持哪些游戏？**
+A: 任何 Source 引擎游戏均支持。
+
+**如何处理 .bz2 回退？**
+A: 首先嘗試下載 `.bz2` 文件，如果失败則嘗試原始文件。
+
+---
+
+## Русский
+
+### Общие вопросы
+
+**Какие игры поддерживаются?**
+A: Любая игра на движке Source с FastDL.
+
+---
+
+## License
+
+MIT License

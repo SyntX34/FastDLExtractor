@@ -164,8 +164,83 @@ Set a default output directory:
 }
 ```
 
-## Environment Variables
+---
 
-The GUI stores settings in:
-- **Windows:** Registry (`HKEY_CURRENT_USER\Software\SyntX34\FastDLTool`)
-- **Linux/macOS:** `~/.config/SyntX34/FastDLTool.conf` (QSettings)
+## Español
+
+### Archivo de Configuración
+
+Ubicación típica: `configs/servers.json`
+
+```json
+{
+    "servers": [
+        {
+            "id": "mi_servidor",
+            "name": "Servidor CS:Source",
+            "fastdl_url": "http://fastdl.ejemplo.com/cstrike/",
+            "game_path": "/ruta/al/juego/cstrike",
+            "resource_types": [".bsp", ".mdl", ".wav", ".vtf"]
+        }
+    ],
+    "download_paths": {
+        "mi_servidor": ["maps/", "materials/"]
+    }
+}
+```
+
+---
+
+## 中文
+
+### 配置文件
+
+默认位置: `configs/servers.json`
+
+```json
+{
+    "servers": [
+        {
+            "id": "cs_server",
+            "name": "CS 伺服器",
+            "fastdl_url": "http://fastdl.example.com/cstrike/",
+            "game_path": "C:/Steam/steamapps/common/Counter-Strike Source/cstrike",
+            "resource_types": [".bsp", ".mdl", ".vtf", ".vmt"]
+        }
+    ],
+    "download_paths": {
+        "cs_server": ["maps/", "materials/", "models/"]
+    }
+}
+```
+
+---
+
+## Русский
+
+### Файл конфигурации
+
+Обычное расположение: `configs/servers.json`
+
+```json
+{
+    "servers": [
+        {
+            "id": "server_id",
+            "name": "Имя сервера",
+            "fastdl_url": "http://fastdl.example.com/cstrike/",
+            "game_path": "C:/Steam/steamapps/common/csgo/csgo",
+            "resource_types": [".bsp", ".mdl", ".vtf", ".vmt"]
+        }
+    ],
+    "download_paths": {
+        "server_id": ["maps/", "materials/"]
+    }
+}
+```
+
+---
+
+## License
+
+MIT License
