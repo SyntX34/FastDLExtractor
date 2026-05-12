@@ -93,9 +93,10 @@ jobs:
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
-            libxkbcommon-x11-0 libdbus-1-3
-          # ↑ xcb / xkb libs are required by PyQt6 at runtime even in
-          #   headless mode; PyInstaller bundles them into the binary.
+            libxkbcommon-x11-0 libdbus-1-3 \
+            libtiff6
+          # ↑ xcb/xkb libs required by PyQt6; PyInstaller bundles them.
+          # libtiff6 is the Ubuntu 24.04 name (was libtiff5 on 22.04).
 
       - name: Download nlohmann/json
         run: |
@@ -229,8 +230,21 @@ jobs:
             Write-Host "ERROR: fastdl.dll not found after build"
             exit 1
           }
-          Copy-Item $dll.FullName gui\fastdl.dll
+          Copy-Item $dll.FullName gui\fastdl.dll -Force
           Write-Host "DLL: $(Get-Item gui\fastdl.dll | Select-Object -ExpandProperty FullName)"
+
+          # Copy bzip2 DLL next to fastdl.dll so PyInstaller bundles it.
+          # vcpkg x64-windows (dynamic) always puts the DLL at this fixed path.
+          $Bz2Dll = "$env:GITHUB_WORKSPACE\vcpkg\installed\x64-windows\bin\bz2.dll"
+          if (Test-Path $Bz2Dll) {
+            Copy-Item $Bz2Dll gui\ -Force
+            Write-Host "Bundling dependency: bz2.dll"
+          } else {
+            Write-Host "ERROR: bz2.dll not found at $Bz2Dll"
+            Write-Host "vcpkg installed tree:"
+            Get-ChildItem "$env:GITHUB_WORKSPACE\vcpkg\installed" -Recurse -Filter "*.dll" | Select-Object FullName
+            exit 1
+          }
 
       - name: Set up Python
         uses: actions/setup-python@v5
