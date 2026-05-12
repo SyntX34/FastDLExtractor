@@ -133,6 +133,25 @@ if ($dll.FullName -ne $DllDest) {
     Copy-Item $dll.FullName $DllDest -Force
 }
 Write-Host "  └─ DLL ready: gui\fastdl.dll"
+
+# ── Bundle bzip2 DLL alongside fastdl.dll so PyInstaller includes it ──────────
+if (-not $UseMinGW) {
+    # vcpkg installs bz2.dll into installed\x64-windows\bin
+    $VcpkgBin = Join-Path $VcpkgRoot "installed\x64-windows\bin\bz2.dll"
+    if (Test-Path $VcpkgBin) {
+        Copy-Item $VcpkgBin $GuiDir -Force
+        Write-Host "  └─ Copied bz2.dll → gui\ (runtime dependency)"
+    } else {
+        Write-Host "  [WARNING] bz2.dll not found in vcpkg install — GUI may fail at runtime"
+    }
+} else {
+    # MinGW: bzip2.dll is in the MinGW bin directory
+    $MinGWBz2 = Join-Path $MinGWPath "bzip2.dll"
+    if (Test-Path $MinGWBz2) {
+        Copy-Item $MinGWBz2 $GuiDir -Force
+        Write-Host "  └─ Copied bz2.dll → gui\ (MinGW)"
+    }
+}
 Write-Host ""
 
 Write-Host "  ┌─ Step 2/3 : Installing Python dependencies ─────────────────┐"

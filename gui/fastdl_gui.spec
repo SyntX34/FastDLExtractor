@@ -50,6 +50,14 @@ def _find_lib():
 
 lib_src, lib_name = _find_lib()
 
+# ─── Additional binary dependencies (platform-specific) ────────────────────────
+_extra_binaries = []
+if sys.platform == "win32":
+    # bzip2 DLL from vcpkg/MinGW — copied into gui/ by build_gui.ps1
+    bz2_dll = _here / "bz2.dll"
+    if bz2_dll.exists():
+        _extra_binaries.append((str(bz2_dll), "."))
+
 # ─── Analysis ─────────────────────────────────────────────────────────────────
 a = Analysis(
     [str(_here / "fastdl_gui.py")],
@@ -57,7 +65,7 @@ a = Analysis(
     binaries=[
         # Bundle the shared library; PyInstaller copies it next to the exe
         (lib_src, "."),
-    ],
+    ] + _extra_binaries,
     datas=[],
     hiddenimports=[
         # PyQt6 sub-modules that PyInstaller sometimes misses
