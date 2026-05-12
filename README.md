@@ -11,7 +11,7 @@ A cross-platform CLI tool for syncing files from a FastDL server to your local g
 | Feature | Description |
 |---------|-------------|
 | **Smart sync** | Compares server file list against your local game folder — only downloads what's missing |
-| **Folder crawl** | Point it at a directory on the FastDL server; it recursively lists every file |
+| **Folder crawl** | Point it at a directory on the FastDL server; it recursively lists every file. Use `folder/prefix*` to filter by prefix (e.g., `maps/zm_*`) |
 | **Multi-threaded** | Configurable parallel workers (default: 4, max: 16) |
 | **BZ2 auto-extract** | Fetches .bz2, decompresses, deletes the archive — fully transparent |
 | **Fallback logic** | Tries .bz2 first, falls back to the plain file if not found |
@@ -20,6 +20,14 @@ A cross-platform CLI tool for syncing files from a FastDL server to your local g
 | **Live progress** | Per-file speed, ETA, overall progress bar |
 | **Static binary** | Windows build links everything statically — no DLL hell |
 | **Unicode console** | UTF-8 manifest embedded — server names with special characters display correctly |
+
+---
+
+## Screenshots
+
+![FastDL Tool Screenshot 1](readme/images/image.png)
+![FastDL Tool Screenshot 2](readme/images/image1.png)
+![FastDL Tool Screenshot 3](readme/images/image3.png)
 
 ---
 
@@ -150,7 +158,28 @@ Specify a directory path ending with `/`. The tool will:
 
 ---
 
-### Mode 2 — Specific files `"path/to/file.ext"`
+### Mode 2 — Prefix filter `"folder/prefix*"` 
+
+Specify a directory path ending with `/` and a prefix filter ending with `*`. The tool will:
+1. Fetch the FastDL server's HTML directory listing for that folder
+2. Filter results by `resource_types` and the given prefix (files must start with the prefix)
+3. Compare the full list against your local `game_path`
+4. Download only the files that are missing locally
+
+```json
+"download_paths": {
+    "css_server1": [
+        "maps/zm_*",
+        "models/v_*"
+    ]
+}
+```
+
+**Best for:** downloading only specific subsets of files (e.g., only zm_ maps or only v_ models).
+
+---
+
+### Mode 3 — Specific files `"path/to/file.ext"`
 
 List exact relative file paths. Each one is checked locally before queuing — already-present files are skipped automatically (unless `-f` / `--force` is used).
 
@@ -170,9 +199,9 @@ List exact relative file paths. Each one is checked locally before queuing — a
 
 ---
 
-### Mode 3 — Mixed
+### Mode 4 — Mixed
 
-Folders and files can coexist in the same list. Duplicates across both types are de-duplicated automatically.
+Folders, prefix filters, and files can coexist in the same list. Duplicates across all types are de-duplicated automatically.
 
 ```json
 "download_paths": {
@@ -232,6 +261,9 @@ FastDLTool -s 0 -d maps/de_dust2.bsp
 # Crawl and sync an entire folder from the CLI (no config edit needed)
 FastDLTool -s 0 -d maps/
 
+# Only download zm_* maps from the maps folder
+FastDLTool -s 0 -d maps/zm_*
+
 # Force re-download everything, ignoring local files
 FastDLTool -s 0 -f
 
@@ -275,6 +307,11 @@ Decompression is **streaming** — no file size limit, minimal memory overhead.
 FastDLTool/
 ├── CMakeLists.txt
 ├── README.md
+├── readme/
+│   └── images/
+│       ├── image.png
+│       ├── image1.png
+│       └── image3.png
 ├── src/
 │   ├── main.cpp                  CLI entry, argument parsing, progress UI
 │   ├── FastDLDownloader.h/.cpp   Thread pool, HTTP (WinHTTP / libcurl), BZ2

@@ -108,7 +108,7 @@ bool FastDLDownloader::fileExistsOnServer(const std::string& relativePath) {
     if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc)) return false;
 
     bool isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
-    HINTERNET hSession = WinHttpOpen(L"FastDLTool/1.0",
+    HINTERNET hSession = WinHttpOpen(L"FastDLTool/1.1",
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME,
                                      WINHTTP_NO_PROXY_BYPASS, 0);
@@ -346,11 +346,23 @@ bool FastDLDownloader::performDownload(const DownloadTask& task) {
 }
 
 #ifdef _WIN32
+struct WinHttpConn {
+    HINTERNET hSession = nullptr;
+    HINTERNET hConnect = nullptr;
+    std::wstring cachedHost;
+    INTERNET_PORT cachedPort = 0;
+    void reset() {
+        if (hConnect) { WinHttpCloseHandle(hConnect); hConnect = nullptr; }
+        if (hSession) { WinHttpCloseHandle(hSession); hSession = nullptr; }
+        cachedHost.clear(); cachedPort = 0;
+    }
+    ~WinHttpConn() { reset(); }
+};
+static thread_local WinHttpConn tls_conn;
+
 static bool winHttpOpenRequest(const std::string& url,
                                 const std::wstring& method,
                                 int timeoutMs,
-                                HINTERNET& hSession,
-                                HINTERNET& hConnect,
                                 HINTERNET& hRequest) {
     URL_COMPONENTS uc{};
     uc.dwStructSize = sizeof(uc);
@@ -363,41 +375,58 @@ static bool winHttpOpenRequest(const std::string& url,
     if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc)) return false;
 
     bool isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
+    std::wstring hostStr(host);
 
-    hSession = WinHttpOpen(L"FastDLTool/1.0",
-                           WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                           WINHTTP_NO_PROXY_NAME,
-                           WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSession) return false;
+    if (!tls_conn.hSession) {
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.1",
+                                        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                        WINHTTP_NO_PROXY_NAME,
+                                        WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!tls_conn.hSession) return false;
+        WinHttpSetTimeouts(tls_conn.hSession, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
+    }
 
-    WinHttpSetTimeouts(hSession, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
-
-    hConnect = WinHttpConnect(hSession, host, uc.nPort, 0);
-    if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+    if (!tls_conn.hConnect || tls_conn.cachedHost != hostStr || tls_conn.cachedPort != uc.nPort) {
+        if (tls_conn.hConnect) { WinHttpCloseHandle(tls_conn.hConnect); tls_conn.hConnect = nullptr; }
+        tls_conn.hConnect = WinHttpConnect(tls_conn.hSession, host, uc.nPort, 0);
+        if (!tls_conn.hConnect) { tls_conn.reset(); return false; }
+        tls_conn.cachedHost = hostStr;
+        tls_conn.cachedPort = uc.nPort;
+    }
 
     DWORD flags = isHttps ? WINHTTP_FLAG_SECURE : 0;
-    hRequest = WinHttpOpenRequest(hConnect, method.c_str(), path,
+    hRequest = WinHttpOpenRequest(tls_conn.hConnect, method.c_str(), path,
                                    nullptr, WINHTTP_NO_REFERER,
                                    WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (!hRequest) {
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return false;
+        tls_conn.reset();
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.1",
+                                        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                        WINHTTP_NO_PROXY_NAME,
+                                        WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!tls_conn.hSession) return false;
+        WinHttpSetTimeouts(tls_conn.hSession, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
+        tls_conn.hConnect = WinHttpConnect(tls_conn.hSession, host, uc.nPort, 0);
+        if (!tls_conn.hConnect) { tls_conn.reset(); return false; }
+        tls_conn.cachedHost = hostStr;
+        tls_conn.cachedPort = uc.nPort;
+        hRequest = WinHttpOpenRequest(tls_conn.hConnect, method.c_str(), path,
+                                       nullptr, WINHTTP_NO_REFERER,
+                                       WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+        if (!hRequest) { tls_conn.reset(); return false; }
     }
     return true;
 }
 
 bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
-    HINTERNET hSession{}, hConnect{}, hRequest{};
-    if (!winHttpOpenRequest(url, L"GET", 15000, hSession, hConnect, hRequest))
+    HINTERNET hRequest{};
+    if (!winHttpOpenRequest(url, L"GET", 15000, hRequest))
         return false;
 
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                             WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
         || !WinHttpReceiveResponse(hRequest, nullptr)) {
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
         return false;
     }
 
@@ -408,41 +437,32 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
 
     if (statusCode != 200) {
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
         return false;
     }
 
-    std::vector<char> buf(65536);
+    std::vector<char> buf(256 * 1024);
     while (true) {
-        DWORD avail = 0;
-        if (!WinHttpQueryDataAvailable(hRequest, &avail) || avail == 0) break;
-        DWORD toRead = (DWORD)std::min((size_t)avail, buf.size());
-        DWORD read   = 0;
-        if (!WinHttpReadData(hRequest, buf.data(), toRead, &read) || read == 0) break;
+        DWORD read = 0;
+        if (!WinHttpReadData(hRequest, buf.data(), (DWORD)buf.size(), &read)) break;
+        if (read == 0) break;
         body.append(buf.data(), read);
     }
 
     WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
     return !body.empty();
 }
 
 bool FastDLDownloader::httpDownload(const std::string& url,
                                     const std::string& localPath,
                                     size_t& outSize, double& outSpeed) {
-    HINTERNET hSession{}, hConnect{}, hRequest{};
-    if (!winHttpOpenRequest(url, L"GET", m_timeoutSeconds * 1000,
-                            hSession, hConnect, hRequest))
+    HINTERNET hRequest{};
+    if (!winHttpOpenRequest(url, L"GET", m_timeoutSeconds * 1000, hRequest))
         return false;
 
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                             WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
         || !WinHttpReceiveResponse(hRequest, nullptr)) {
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
         return false;
     }
 
@@ -452,8 +472,6 @@ bool FastDLDownloader::httpDownload(const std::string& url,
         WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &statusLen, WINHTTP_NO_HEADER_INDEX);
     if (statusCode != 200) {
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
         return false;
     }
 
@@ -471,24 +489,17 @@ bool FastDLDownloader::httpDownload(const std::string& url,
     std::ofstream file(localPath, std::ios::binary | std::ios::trunc);
     if (!file.is_open()) {
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
         return false;
     }
 
     auto startTime = std::chrono::steady_clock::now();
     size_t received = 0;
-    std::vector<char> buf(65536);
+    std::vector<char> buf(256 * 1024); // 256 KB read buffer
 
     while (true) {
-        DWORD avail = 0;
-        if (!WinHttpQueryDataAvailable(hRequest, &avail)) break;
-        if (avail == 0) break;
-
-        DWORD toRead = (DWORD)std::min((size_t)avail, buf.size());
-        DWORD read   = 0;
-        if (!WinHttpReadData(hRequest, buf.data(), toRead, &read)) break;
-        if (read == 0) break;
+        DWORD read = 0;
+        if (!WinHttpReadData(hRequest, buf.data(), (DWORD)buf.size(), &read)) break;
+        if (read == 0) break; // real EOF
 
         file.write(buf.data(), read);
         received += read;
@@ -498,7 +509,7 @@ bool FastDLDownloader::httpDownload(const std::string& url,
             double el  = std::chrono::duration<double>(now - startTime).count();
             double spd = (el > 0) ? (double)received / el : 0.0;
             double eta = (contentLen > 0 && spd > 0)
-                         ? (double)(contentLen - received) / spd : -1.0;
+                         ? (double)(contentLen - received) / spd : -1.1;
             double prog = (contentLen > 0) ? (double)received / contentLen : 0.0;
             m_callback->onFileProgress(localPath, prog, received, contentLen, spd, eta);
         }
@@ -510,8 +521,6 @@ bool FastDLDownloader::httpDownload(const std::string& url,
     double elapsed = std::chrono::duration<double>(endTime - startTime).count();
 
     WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
 
     outSize  = received;
     outSpeed = (elapsed > 0) ? (double)received / elapsed : 0.0;
@@ -548,7 +557,7 @@ static int curlProgress(void* ud, curl_off_t dlTotal, curl_off_t dlNow,
     auto   now  = std::chrono::steady_clock::now();
     double el   = std::chrono::duration<double>(now - st->start).count();
     double spd  = (el > 0) ? (double)dlNow / el : 0.0;
-    double eta  = (dlTotal > 0 && spd > 0) ? (double)(dlTotal - dlNow) / spd : -1.0;
+    double eta  = (dlTotal > 0 && spd > 0) ? (double)(dlTotal - dlNow) / spd : -1.1;
     double prog = (dlTotal > 0) ? (double)dlNow / dlTotal : 0.0;
 
     st->cb->onFileProgress(st->filename, prog,
@@ -568,7 +577,7 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &ws);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,       15L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.1");
 
     CURLcode res = curl_easy_perform(curl);
     long http_code = 0;
@@ -603,7 +612,7 @@ bool FastDLDownloader::httpDownload(const std::string& url,
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS,       0L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,   1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,          (long)m_timeoutSeconds);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT,        "FastDLTool/1.0");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,        "FastDLTool/1.1");
     curl_easy_setopt(curl, CURLOPT_FAILONERROR,      1L);
 
     CURLcode res = curl_easy_perform(curl);

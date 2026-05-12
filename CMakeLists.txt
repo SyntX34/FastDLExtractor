@@ -101,19 +101,18 @@ if(WIN32)
         add_custom_command(
             OUTPUT  "${UTF8_MANIFEST_OBJ}"
             COMMAND "${WINDRES_EXE}"
-                    --no-preprocess
                     -J rc
                     -O coff
                     -i "${UTF8_MANIFEST_RC}"
                     -o "${UTF8_MANIFEST_OBJ}"
             DEPENDS "${UTF8_MANIFEST_RC}" "${UTF8_MANIFEST_XML}"
-            COMMENT "Embedding UTF-8 manifest (windres --no-preprocess)"
+            COMMENT "Embedding UTF-8 manifest"
             VERBATIM
         )
 
         target_sources(FastDLTool PRIVATE "${UTF8_MANIFEST_OBJ}")
 
-    else()
+    else()  # MSVC / other Windows compiler
         find_path(BZ2_INCLUDE_DIR bzlib.h)
         find_library(BZ2_LIB bz2)
 
@@ -128,19 +127,21 @@ if(WIN32)
 
         set(UTF8_MANIFEST_XML "${CMAKE_CURRENT_BINARY_DIR}/utf8.manifest")
         file(WRITE "${UTF8_MANIFEST_XML}"
-"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
-<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\n\
-  <application>\n\
-    <windowsSettings>\n\
-      <activeCodePage xmlns=\"http://schemas.microsoft.com/SMI/2019/WindowsSettings\">UTF-8</activeCodePage>\n\
-    </windowsSettings>\n\
-  </application>\n\
-</assembly>\n")
+"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">
+  <application>
+    <windowsSettings>
+      <activeCodePage xmlns=\"http://schemas.microsoft.com/SMI/2019/WindowsSettings\">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>
+")
         set_target_properties(FastDLTool PROPERTIES
             VS_USER_PROPS "${UTF8_MANIFEST_XML}")
-    endif()
 
-else()
+    endif()  # MINGW
+
+else()  # Linux / macOS
     find_package(CURL REQUIRED)
     find_library(BZ2_LIB NAMES bz2)
 
@@ -154,7 +155,7 @@ else()
         pthread
         dl
     )
-endif()
+endif()  # WIN32
 
 if(MSVC)
     target_compile_options(FastDLTool PRIVATE /W3)

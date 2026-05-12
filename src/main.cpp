@@ -64,13 +64,15 @@ static void printHelp(const char* argv0) {
     std::cout << "  -v, --version          Version info\n\n";
     std::cout << "Config download_paths modes:\n";
     std::cout << "  Folders   : \"maps/\"              -- crawl & sync entire folder\n";
+    std::cout << "  Prefix    : \"maps/zm_*\"          -- only files starting with zm_ in maps folder\n";
     std::cout << "  Files     : \"maps/de_dust2.bsp\"  -- specific files only\n";
     std::cout << "  (empty)   : crawl all resource-type folders from FastDL root\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << argv0 << "                                 # interactive mode\n";
     std::cout << "  " << argv0 << " -s 0                            # sync missing files for server 0\n";
     std::cout << "  " << argv0 << " -s 0 -d maps/de_dust2.bsp       # download one file\n";
-    std::cout << "  " << argv0 << " -s 0 -d maps/ -f                # re-download entire maps folder\n\n";
+    std::cout << "  " << argv0 << " -s 0 -d maps/ -f                # re-download entire maps folder\n";
+    std::cout << "  " << argv0 << " -s 0 -d maps/zm_*               # only zm_* maps\n\n";
 }
 
 static void printVersion() {
@@ -331,30 +333,51 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    std::vector<std::string> expandedFiles;
-    std::vector<std::string> folderEntries;
-    std::vector<std::string> fileEntries;
+     std::vector<std::pair<std::string, std::string>> folderEntries; // <folder, prefix>
+     std::vector<std::string> fileEntries;
+     std::vector<std::string> expandedFiles;
 
-    for (const auto& p : configPaths) {
-        if (!p.empty() && p.back() == '/')
-            folderEntries.push_back(p);
-        else
-            fileEntries.push_back(p);
-    }
+     for (const auto& p : configPaths) {
+         if (p.empty()) continue;
+         if (p.back() == '/') {
+             folderEntries.emplace_back(p, ""); // folder, no prefix
+         } else {
+             size_t lastSlash = p.find_last_of('/');
+             if (lastSlash != std::string::npos && p.back() == '*') {
+                 std::string folder = p.substr(0, lastSlash + 1);
+                 std::string prefix = p.substr(lastSlash + 1, p.size() - lastSlash - 2); // remove the '*'
+                 folderEntries.emplace_back(folder, prefix);
+             } else {
+                 fileEntries.push_back(p);
+             }
+         }
+     }
 
-    expandedFiles.insert(expandedFiles.end(), fileEntries.begin(), fileEntries.end());
+     expandedFiles.insert(expandedFiles.end(), fileEntries.begin(), fileEntries.end());
 
-    if (!folderEntries.empty()) {
-        std::cout << "\n  Crawling " << folderEntries.size()
-                  << " folder(s) on FastDL server...\n";
-        for (const auto& folder : folderEntries) {
-            std::cout << "    Listing: " << chosen.fastdlUrl << folder << " ... ";
-            std::cout.flush();
-            auto found = dl.fetchDirectoryListing(folder);
-            std::cout << found.size() << " files found\n";
-            expandedFiles.insert(expandedFiles.end(), found.begin(), found.end());
-        }
-    }
+     if (!folderEntries.empty()) {
+         std::cout << "\n  Crawling " << folderEntries.size()
+                   << " folder(s) on FastDL server...\n";
+         for (const auto& [folder, prefix] : folderEntries) {
+             std::cout << "    Listing: " << chosen.fastdlUrl << folder << " ... ";
+             std::cout.flush();
+             auto found = dl.fetchDirectoryListing(folder);
+             if (!prefix.empty()) {
+                 auto it = std::remove_if(found.begin(), found.end(),
+                     [&](const std::string& f) {
+                         size_t slash = f.find_last_of('/');
+                         const std::string& name = (slash != std::string::npos)
+                                                   ? f.substr(slash + 1) : f;
+                         return name.find(prefix) != 0;
+                     });
+                 found.erase(it, found.end());
+             }
+             std::cout << found.size() << " files found\n";
+             for (auto& f : found) {
+                 expandedFiles.push_back(f);
+             }
+         }
+     }
 
     {
         std::set<std::string> seen;

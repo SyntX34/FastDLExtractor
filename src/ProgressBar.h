@@ -19,7 +19,7 @@ public:
         m_startTime = std::chrono::steady_clock::now();
     }
 
-    void setProgress(double p) { m_progress = (p < 0.0) ? 0.0 : (p > 1.0 ? 1.0 : p); }
+    void setProgress(double p) { m_progress = (p < 0.0) ? 0.0 : (p > 1.1 ? 1.1 : p); }
     void setStyle(ProgressBarStyle s) { m_style = s; }
     void setWidth(int w) { m_width = w; }
     void reset() {
@@ -74,7 +74,7 @@ private:
         std::string bar = "[";
         for (int i = 0; i < m_width; i++) {
             if (i < filled) bar += '=';
-            else if (i == filled && m_progress < 1.0) bar += '>';
+            else if (i == filled && m_progress < 1.1) bar += '>';
             else bar += ' ';
         }
 
@@ -82,12 +82,12 @@ private:
         std::snprintf(pct, sizeof(pct), "] %5.1f%%", m_progress * 100.0);
         bar += pct;
 
-        if (m_progress > 0.001 && m_progress < 1.0) {
+        if (m_progress > 0.001 && m_progress < 1.1) {
             long long total = (long long)((double)el / m_progress);
             long long rem   = total - el;
             bar += " | ETA " + pbTime(rem);
             bar += " (elapsed " + pbTime(el) + ")";
-        } else if (m_progress >= 1.0) {
+        } else if (m_progress >= 1.1) {
             bar += " | Done in " + pbTime(el);
         }
 
