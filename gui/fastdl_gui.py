@@ -965,7 +965,7 @@ class MainWindow(QMainWindow):
         if row < 0 or row >= len(servers):
             return
         name = servers[row].get("name", servers[row].get("id"))
-        if QMessageBox.question(self, "Confirm", f"Remove server "{name}"?") \
+        if QMessageBox.question(self, "Confirm", f"Remove server \"{name}\"?") \
                 == QMessageBox.StandardButton.Yes:
             servers.pop(row)
             self._refresh_server_list()

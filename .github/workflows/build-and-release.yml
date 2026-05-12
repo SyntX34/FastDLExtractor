@@ -141,11 +141,13 @@ jobs:
 
       - name: Build GUI executable (PyInstaller)
         run: |
+          cd gui
           pyinstaller fastdl_gui.spec \
-            --distpath dist \
-            --workpath build-pyinstaller \
+            --distpath ../dist \
+            --workpath ../build-pyinstaller \
             --noconfirm \
             --clean
+          cd ..
           echo "--- dist contents ---"
           ls -lh dist/
           # Verify the binary was produced
@@ -244,11 +246,13 @@ jobs:
       - name: Build GUI executable (PyInstaller)
         shell: pwsh
         run: |
+          Push-Location gui
           pyinstaller fastdl_gui.spec `
-            --distpath dist `
-            --workpath build-pyinstaller `
+            --distpath "..\dist" `
+            --workpath "..\build-pyinstaller" `
             --noconfirm `
             --clean
+          Pop-Location
           Write-Host "--- dist contents ---"
           Get-ChildItem dist\
           if (-not (Test-Path "dist\FastDLTool.exe")) {
