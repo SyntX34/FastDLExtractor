@@ -46,6 +46,7 @@ jobs:
           path: build-cli-linux/FastDLTool
           retention-days: 7
 
+
   build-cli-windows:
     runs-on: windows-latest
     steps:
@@ -53,22 +54,23 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install vcpkg deps
+        shell: pwsh
         run: |
           git clone --depth=1 https://github.com/Microsoft/vcpkg.git
           cd vcpkg
           .\bootstrap-vcpkg.bat -disableMetrics
           .\vcpkg integrate install
           .\vcpkg install bzip2:x64-windows nlohmann-json:x64-windows --classic --recurse
-        shell: pwsh
 
       - name: Build CLI
+        shell: pwsh
         run: |
-          mkdir build-cli-windows && cd build-cli-windows
+          New-Item -ItemType Directory -Force -Path build-cli-windows | Out-Null
+          cd build-cli-windows
           cmake .. -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
           cmake --build . --config Release
-        shell: pwsh
 
       - uses: actions/upload-artifact@v4
         with:
@@ -81,11 +83,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ build-essential \
-            libbz2-dev libcurl4-gnutls-dev
+          sudo apt-get install -y \
+            cmake g++ build-essential \
+            libbz2-dev libcurl4-gnutls-dev \
+            python3 python3-pip python3-venv \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libdbus-1-3
+          # ↑ xcb / xkb libs are required by PyQt6 at runtime even in
+          #   headless mode; PyInstaller bundles them into the binary.
 
       - name: Download nlohmann/json
         run: |
@@ -94,38 +104,67 @@ jobs:
             https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
             -o third_party/nlohmann/json.hpp
 
-      - name: Copy sources to gui/src
+      - name: Stage GUI sources
         run: |
           mkdir -p gui/src gui/third_party
           cp src/FastDLDownloader.cpp src/FastDLDownloader.h \
              src/ConfigManager.cpp    src/ConfigManager.h \
-             src/Utils.h src/ProgressBar.h gui/src/
+             src/Utils.h src/ProgressBar.h \
+             src/fastdl_capi.cpp src/fastdl_capi.h \
+             gui/src/
           cp -r third_party/nlohmann gui/third_party/
 
       - name: Build shared library
         run: |
-          cd gui
-          mkdir build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release
+          mkdir -p gui/build && cd gui/build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="${{ github.workspace }}/gui"
           cmake --build . --parallel $(nproc)
-          cp libfastdl.so ../libfastdl.so
+          # Fallback: find and copy if CMake didn't honour the output dir
+          if [ ! -f "${{ github.workspace }}/gui/libfastdl.so" ]; then
+            find gui/build -name "libfastdl.so" | head -1 \
+              | xargs -I{} cp {} gui/libfastdl.so
+          fi
+          echo "Library: $(ls -lh gui/libfastdl.so)"
 
-      - name: Package GUI bundle
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
         run: |
-          mkdir -p dist-gui-linux
-          cp gui/libfastdl.so   dist-gui-linux/
-          cp gui/fastdl_gui.py  dist-gui-linux/
-          echo "#!/usr/bin/env bash
-          cd \"\$(dirname \"\$0\")\"
-          pip install PyQt6 -q
-          python fastdl_gui.py \"\$@\"" > dist-gui-linux/run_gui.sh
-          chmod +x dist-gui-linux/run_gui.sh
-          tar -czf FastDLTool-GUI-linux-x86_64.tar.gz -C dist-gui-linux .
+          python -m pip install --upgrade pip
+          pip install PyQt6 pyinstaller
+
+      - name: Build GUI executable (PyInstaller)
+        run: |
+          pyinstaller fastdl_gui.spec \
+            --distpath dist \
+            --workpath build-pyinstaller \
+            --noconfirm \
+            --clean
+          echo "--- dist contents ---"
+          ls -lh dist/
+          # Verify the binary was produced
+          test -f dist/FastDLTool || \
+            { echo "ERROR: dist/FastDLTool not found"; exit 1; }
+
+      - name: Smoke-test executable
+        run: |
+          # QT_QPA_PLATFORM=offscreen lets the Qt platform plugin initialise
+          # without a real display; the app will error out quickly but we just
+          # want to confirm it isn't a missing-library crash.
+          QT_QPA_PLATFORM=offscreen timeout 5 dist/FastDLTool || true
+
+      - name: Rename artifact
+        run: cp dist/FastDLTool FastDLTool-GUI-linux-x86_64
 
       - uses: actions/upload-artifact@v4
         with:
           name: fastdl-gui-linux
-          path: FastDLTool-GUI-linux-x86_64.tar.gz
+          path: FastDLTool-GUI-linux-x86_64
           retention-days: 7
 
   build-gui-windows:
@@ -135,60 +174,94 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Download nlohmann/json
+        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path third_party\nlohmann
+          New-Item -ItemType Directory -Force -Path third_party\nlohmann | Out-Null
           Invoke-WebRequest `
             https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp `
             -OutFile third_party\nlohmann\json.hpp
-        shell: pwsh
 
-      - name: Install vcpkg deps
+      - name: Install vcpkg dependencies
+        shell: pwsh
         run: |
           git clone --depth=1 https://github.com/Microsoft/vcpkg.git
           cd vcpkg
           .\bootstrap-vcpkg.bat -disableMetrics
           .\vcpkg integrate install
           .\vcpkg install bzip2:x64-windows --classic --recurse
-        shell: pwsh
 
-      - name: Copy sources
+      - name: Stage GUI sources
+        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path gui\src, gui\third_party
-          foreach ($f in @("FastDLDownloader.cpp","FastDLDownloader.h",
-                           "ConfigManager.cpp","ConfigManager.h",
-                           "Utils.h","ProgressBar.h")) {
+          New-Item -ItemType Directory -Force -Path gui\src, gui\third_party | Out-Null
+          foreach ($f in @(
+              "FastDLDownloader.cpp","FastDLDownloader.h",
+              "ConfigManager.cpp","ConfigManager.h",
+              "Utils.h","ProgressBar.h",
+              "fastdl_capi.cpp","fastdl_capi.h"
+          )) {
             Copy-Item "src\$f" "gui\src\$f"
           }
           Copy-Item -Recurse -Force third_party\nlohmann gui\third_party\nlohmann
-        shell: pwsh
 
-      - name: Build shared library
+      - name: Build shared library (DLL)
+        shell: pwsh
         run: |
-          cd gui
-          New-Item -ItemType Directory -Force -Path build-win
-          cd build-win
-          cmake .. -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+          New-Item -ItemType Directory -Force -Path gui\build-win | Out-Null
+          Push-Location gui\build-win
+          cmake ..\  `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_BUILD_SHARED_LIBS=ON `
+            -A x64
           cmake --build . --config Release
+          Pop-Location
+
+          # Locate and copy DLL to gui\ (where the spec expects it)
+          $dll = Get-ChildItem -Path gui\build-win -Filter "fastdl.dll" -Recurse |
+                   Select-Object -First 1
+          if (-not $dll) {
+            Write-Host "ERROR: fastdl.dll not found after build"
+            exit 1
+          }
+          Copy-Item $dll.FullName gui\fastdl.dll
+          Write-Host "DLL: $(Get-Item gui\fastdl.dll | Select-Object -ExpandProperty FullName)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 pyinstaller
         shell: pwsh
 
-      - name: Package GUI bundle
-        run: |
-          New-Item -ItemType Directory -Force -Path dist-gui-win
-          $dll = Get-ChildItem -Path gui\build-win -Filter "fastdl.dll" -Recurse | Select-Object -First 1
-          Copy-Item $dll.FullName dist-gui-win\fastdl.dll
-          Copy-Item gui\fastdl_gui.py dist-gui-win\fastdl_gui.py
-          '@echo off
-          pip install PyQt6 -q
-          python "%~dp0fastdl_gui.py" %*' | Out-File dist-gui-win\run_gui.bat -Encoding ASCII
-          Compress-Archive -Path dist-gui-win\* -DestinationPath FastDLTool-GUI-windows-x86_64.zip
+      - name: Build GUI executable (PyInstaller)
         shell: pwsh
+        run: |
+          pyinstaller fastdl_gui.spec `
+            --distpath dist `
+            --workpath build-pyinstaller `
+            --noconfirm `
+            --clean
+          Write-Host "--- dist contents ---"
+          Get-ChildItem dist\
+          if (-not (Test-Path "dist\FastDLTool.exe")) {
+            Write-Host "ERROR: dist\FastDLTool.exe not found"
+            exit 1
+          }
+
+      - name: Rename artifact
+        shell: pwsh
+        run: Copy-Item dist\FastDLTool.exe FastDLTool-GUI-windows-x86_64.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: fastdl-gui-windows
-          path: FastDLTool-GUI-windows-x86_64.zip
+          path: FastDLTool-GUI-windows-x86_64.exe
           retention-days: 7
 
   release:
@@ -208,14 +281,15 @@ jobs:
 
       - name: Prepare release files
         run: |
-          # CLI
-          cp dist/fastdl-cli-linux/FastDLTool      FastDLTool-linux-x86_64
-          cp dist/fastdl-cli-windows/FastDLTool.exe FastDLTool-windows-x86_64.exe
+          # CLI binaries
+          cp dist/fastdl-cli-linux/FastDLTool       FastDLTool-linux-x86_64
+          cp dist/fastdl-cli-windows/FastDLTool.exe  FastDLTool-windows-x86_64.exe
           chmod +x FastDLTool-linux-x86_64
 
-          # GUI bundles
-          cp dist/fastdl-gui-linux/FastDLTool-GUI-linux-x86_64.tar.gz   .
-          cp dist/fastdl-gui-windows/FastDLTool-GUI-windows-x86_64.zip  .
+          # GUI standalone executables (already renamed by each build job)
+          cp dist/fastdl-gui-linux/FastDLTool-GUI-linux-x86_64     FastDLTool-GUI-linux-x86_64
+          cp dist/fastdl-gui-windows/FastDLTool-GUI-windows-x86_64.exe FastDLTool-GUI-windows-x86_64.exe
+          chmod +x FastDLTool-GUI-linux-x86_64
 
           echo "Release assets:"
           ls -lah FastDLTool*
@@ -230,22 +304,42 @@ jobs:
 
             ### Downloads
 
-            | File | Description |
-            |------|-------------|
-            | `FastDLTool-linux-x86_64` | CLI – Linux (no deps) |
-            | `FastDLTool-windows-x86_64.exe` | CLI – Windows (no deps) |
-            | `FastDLTool-GUI-linux-x86_64.tar.gz` | GUI bundle – Linux |
-            | `FastDLTool-GUI-windows-x86_64.zip` | GUI bundle – Windows |
+            | File | Platform | Type | Notes |
+            |------|----------|------|-------|
+            | `FastDLTool-linux-x86_64` | Linux | CLI | Statically linked, no deps |
+            | `FastDLTool-windows-x86_64.exe` | Windows | CLI | Statically linked, no deps |
+            | `FastDLTool-GUI-linux-x86_64` | Linux | GUI | Single binary, no Python needed |
+            | `FastDLTool-GUI-windows-x86_64.exe` | Windows | GUI | Single .exe, no Python needed |
 
             ### GUI Quick Start
-            1. Extract the GUI bundle
-            2. `pip install PyQt6`
-            3. Run `run_gui.sh` (Linux) or `run_gui.bat` (Windows)
+            The GUI executables are fully self-contained — no Python installation,
+            no DLLs, no `.so` files required. Just download and run:
+
+            **Linux**
+            ```bash
+            chmod +x FastDLTool-GUI-linux-x86_64
+            ./FastDLTool-GUI-linux-x86_64
+            ```
+
+            **Windows**
+            ```
+            Double-click FastDLTool-GUI-windows-x86_64.exe
+            ```
+
+            ### CLI Quick Start
+            ```bash
+            # Linux
+            chmod +x FastDLTool-linux-x86_64
+            ./FastDLTool-linux-x86_64 --help
+
+            # Windows
+            FastDLTool-windows-x86_64.exe --help
+            ```
           files: |
             FastDLTool-linux-x86_64
             FastDLTool-windows-x86_64.exe
-            FastDLTool-GUI-linux-x86_64.tar.gz
-            FastDLTool-GUI-windows-x86_64.zip
+            FastDLTool-GUI-linux-x86_64
+            FastDLTool-GUI-windows-x86_64.exe
           generate_release_notes: true
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}

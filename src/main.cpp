@@ -46,7 +46,7 @@ static void enableUtf8Console() {
 static void printBanner() {
     std::cout << "\n";
     std::cout << "+------------------------------------------------------------------+\n";
-    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.1           |\n";
+    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.2           |\n";
     std::cout << "|           Windows + Linux  |  MinGW / GCC  |  C++17             |\n";
     std::cout << "|   Author: SyntX | https://github.com/SyntX34/FastDLExtractor    |\n";
     std::cout << "+------------------------------------------------------------------+\n\n";
@@ -76,7 +76,7 @@ static void printHelp(const char* argv0) {
 }
 
 static void printVersion() {
-    std::cout << "FastDL Tool  v1.1\n";
+    std::cout << "FastDL Tool  v1.2\n";
     std::cout << "Built with C++17 | CMake | MinGW/GCC\n";
     std::cout << "MIT License\n";
 }

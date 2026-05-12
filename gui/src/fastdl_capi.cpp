@@ -207,7 +207,7 @@ int fdl_config_save(const char* filepath, const char* json_content) {
 }
 
 const char* fdl_version(void) {
-    return "FastDL Tool v1.1 (GUI edition)";
+    return "FastDL Tool v1.2 (GUI edition)";
 }
 
 } /* extern "C" */

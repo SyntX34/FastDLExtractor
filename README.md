@@ -1,8 +1,10 @@
-FastDL Tool · Game File Downloader · v1.1
+FastDL Tool · Game File Downloader · v1.2
 Windows + Linux | MinGW / GCC | C++17
 Author: SyntX · github.com/SyntX34/FastDLExtractor
 
 A cross-platform CLI tool for syncing files from a FastDL server to your local game installation. Built for Source Engine games (CS:Source, Garry's Mod, TF2, …). Automatically decompresses .bz2 files, downloads in parallel, and only grabs what you're missing.
+
+A **graphical frontend** (PyQt6) is also included and can be compiled into a single standalone executable for Windows, Linux, and macOS — no Python installation required on the target machine.
 
 ---
 
@@ -20,6 +22,7 @@ A cross-platform CLI tool for syncing files from a FastDL server to your local g
 | **Live progress** | Per-file speed, ETA, overall progress bar |
 | **Static binary** | Windows build links everything statically — no DLL hell |
 | **Unicode console** | UTF-8 manifest embedded — server names with special characters display correctly |
+| **GUI frontend** | PyQt6 dark-themed desktop app, compiles to a single .exe/.bin with no runtime deps |
 
 ---
 
@@ -31,7 +34,150 @@ A cross-platform CLI tool for syncing files from a FastDL server to your local g
 
 ---
 
-## Building
+## GUI Frontend
+
+The graphical interface (`gui/fastdl_gui.py`) wraps the C++ backend via `ctypes` and provides:
+
+- **Server manager** — add, edit, and remove server profiles in-app; no JSON editing needed
+- **Download tab** — select a server, set threads, optionally enter a specific path, and hit Start
+- **Live log** — colour-coded per-file status (downloading / extracting / error / done)
+- **Dual progress bars** — current file and overall session
+- **Settings tab** — configure the backend library path, default output directory, and thread count
+- **Dark theme** — Catppuccin-inspired palette (matches the CLI aesthetic)
+
+### Building the GUI executable
+
+The build system is a three-step pipeline handled entirely by a single script:
+
+```
+Step 1: Build C++ shared library  (cmake → libfastdl.so / fastdl.dll)
+Step 2: Install Python deps       (venv + pip install PyQt6 pyinstaller)
+Step 3: PyInstaller               (→ dist/FastDLTool[.exe], single file)
+```
+
+The resulting binary bundles the C++ library and all Python dependencies inside itself. Copy it anywhere — no Python, no `.so`, no DLLs needed on the target machine.
+
+---
+
+#### Linux / macOS
+
+**Prerequisites:**
+
+```bash
+# Debian / Ubuntu
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev python3 python3-venv
+
+# Fedora / RHEL
+sudo dnf install cmake gcc-c++ libcurl-devel bzip2-devel python3
+
+# Arch
+sudo pacman -S cmake gcc curl bzip2 python
+
+# macOS (Homebrew)
+brew install cmake bzip2 curl python
+```
+
+**Build:**
+
+```bash
+chmod +x build_gui.sh
+./build_gui.sh
+```
+
+Output: `dist/FastDLTool`
+
+```bash
+./dist/FastDLTool
+```
+
+---
+
+#### Windows
+
+**Prerequisites:**
+
+- [CMake](https://cmake.org/download/) in your PATH
+- One of:
+  - **MSVC** — Visual Studio 2019/2022 with C++ workload (recommended)
+  - **MinGW** — via [MSYS2](https://www.msys2.org/)
+- Python 3.10+ in your PATH (`python --version` works)
+- Git (for automatic vcpkg bootstrap)
+
+**Build with MSVC (default) — run in Developer PowerShell for VS 2022:**
+
+```powershell
+.\build_gui.ps1
+```
+
+**Build with MinGW instead of MSVC:**
+
+```powershell
+.\build_gui.ps1 -UseMinGW
+# or with a custom MinGW path:
+.\build_gui.ps1 -UseMinGW -MinGWPath "C:\msys64\mingw64\bin"
+```
+
+**Custom vcpkg location:**
+
+```powershell
+.\build_gui.ps1 -VcpkgRoot "D:\tools\vcpkg"
+```
+
+Output: `dist\FastDLTool.exe`
+
+```powershell
+.\dist\FastDLTool.exe
+```
+
+---
+
+#### Manual build (any platform)
+
+If you prefer to drive each step yourself:
+
+```bash
+# 1. Build the C++ library
+./build_lib.sh          # Linux/macOS
+.\build_lib.ps1         # Windows PowerShell
+
+# 2. Install Python deps
+pip install PyQt6 pyinstaller
+
+# 3. Run PyInstaller
+pyinstaller fastdl_gui.spec --distpath dist --noconfirm --clean
+```
+
+---
+
+#### PyInstaller spec (`fastdl_gui.spec`)
+
+The spec file controls exactly what goes into the executable:
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `console` | `False` | No terminal window on launch |
+| `binaries` | C++ `.so`/`.dll` | Bundled automatically by the spec |
+| `hiddenimports` | PyQt6, ctypes, … | Ensures no missing module at runtime |
+| `excludes` | numpy, matplotlib, … | Strips unused heavy packages |
+| `upx` | `True` | Compresses the binary if UPX is installed |
+
+To add a custom icon, place `gui/icon.ico` (Windows) or `gui/icon.icns` (macOS) in the project, then uncomment the `icon=` line in the spec.
+
+---
+
+#### What each build file does
+
+| File | Platform | Purpose |
+|------|----------|---------|
+| `build_gui.sh` | Linux / macOS | Build C++ lib → venv → PyInstaller → `dist/FastDLTool` |
+| `build_gui.ps1` | Windows | Build C++ DLL → venv → PyInstaller → `dist/FastDLTool.exe` |
+| `fastdl_gui.spec` | All | PyInstaller recipe (library bundling, hidden imports, excludes) |
+| `build_lib.sh` | Linux / macOS | Build C++ shared library only (no Python step) |
+| `build_lib.ps1` | Windows | Build C++ DLL only (no Python step) |
+
+---
+
+## CLI Building
 
 ### Windows (MinGW-w64 / MSYS2)
 
@@ -228,7 +374,7 @@ If `download_paths` is empty or absent for a server, the tool prints a hint and 
 
 ---
 
-## Usage
+## CLI Usage
 
 ```
 FastDLTool [OPTIONS]
@@ -307,6 +453,11 @@ Decompression is **streaming** — no file size limit, minimal memory overhead.
 FastDLTool/
 ├── CMakeLists.txt
 ├── README.md
+├── fastdl_gui.spec               PyInstaller recipe for the GUI executable
+├── build_gui.sh                  Full GUI build: C++ lib + Python exe (Linux/macOS)
+├── build_gui.ps1                 Full GUI build: C++ DLL + Python exe (Windows)
+├── build_lib.sh                  C++ shared library only (Linux/macOS)
+├── build_lib.ps1                 C++ shared library only (Windows)
 ├── readme/
 │   └── images/
 │       ├── image.png
@@ -316,8 +467,17 @@ FastDLTool/
 │   ├── main.cpp                  CLI entry, argument parsing, progress UI
 │   ├── FastDLDownloader.h/.cpp   Thread pool, HTTP (WinHTTP / libcurl), BZ2
 │   ├── ConfigManager.h/.cpp      JSON config load / save
+│   ├── fastdl_capi.h/.cpp        Plain-C bridge exposed by the shared library
 │   ├── ProgressBar.h             Animated progress bar renderer
 │   └── Utils.h                   formatBytes / formatSpeed / formatDuration
+├── gui/
+│   ├── fastdl_gui.py             PyQt6 GUI frontend (calls C++ lib via ctypes)
+│   ├── fastdl.dll                (Windows – generated by build_gui.ps1)
+│   ├── libfastdl.so              (Linux   – generated by build_gui.sh)
+│   └── libfastdl.dylib           (macOS   – generated by build_gui.sh)
+├── dist/
+│   ├── FastDLTool.exe            (Windows – generated by build_gui.ps1)
+│   └── FastDLTool                (Linux/macOS – generated by build_gui.sh)
 └── third_party/
     └── nlohmann/
         └── json.hpp              Single-header JSON library (no extra deps)

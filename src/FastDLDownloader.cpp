@@ -108,7 +108,7 @@ bool FastDLDownloader::fileExistsOnServer(const std::string& relativePath) {
     if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc)) return false;
 
     bool isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
-    HINTERNET hSession = WinHttpOpen(L"FastDLTool/1.1",
+    HINTERNET hSession = WinHttpOpen(L"FastDLTool/1.2",
                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME,
                                      WINHTTP_NO_PROXY_BYPASS, 0);
@@ -378,7 +378,7 @@ static bool winHttpOpenRequest(const std::string& url,
     std::wstring hostStr(host);
 
     if (!tls_conn.hSession) {
-        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.1",
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.2",
                                         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                         WINHTTP_NO_PROXY_NAME,
                                         WINHTTP_NO_PROXY_BYPASS, 0);
@@ -400,7 +400,7 @@ static bool winHttpOpenRequest(const std::string& url,
                                    WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (!hRequest) {
         tls_conn.reset();
-        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.1",
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.2",
                                         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                         WINHTTP_NO_PROXY_NAME,
                                         WINHTTP_NO_PROXY_BYPASS, 0);
@@ -509,7 +509,7 @@ bool FastDLDownloader::httpDownload(const std::string& url,
             double el  = std::chrono::duration<double>(now - startTime).count();
             double spd = (el > 0) ? (double)received / el : 0.0;
             double eta = (contentLen > 0 && spd > 0)
-                         ? (double)(contentLen - received) / spd : -1.1;
+                         ? (double)(contentLen - received) / spd : -1.2;
             double prog = (contentLen > 0) ? (double)received / contentLen : 0.0;
             m_callback->onFileProgress(localPath, prog, received, contentLen, spd, eta);
         }
@@ -557,7 +557,7 @@ static int curlProgress(void* ud, curl_off_t dlTotal, curl_off_t dlNow,
     auto   now  = std::chrono::steady_clock::now();
     double el   = std::chrono::duration<double>(now - st->start).count();
     double spd  = (el > 0) ? (double)dlNow / el : 0.0;
-    double eta  = (dlTotal > 0 && spd > 0) ? (double)(dlTotal - dlNow) / spd : -1.1;
+    double eta  = (dlTotal > 0 && spd > 0) ? (double)(dlTotal - dlNow) / spd : -1.2;
     double prog = (dlTotal > 0) ? (double)dlNow / dlTotal : 0.0;
 
     st->cb->onFileProgress(st->filename, prog,
@@ -577,7 +577,7 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &ws);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,       15L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.1");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.2");
 
     CURLcode res = curl_easy_perform(curl);
     long http_code = 0;
@@ -612,7 +612,7 @@ bool FastDLDownloader::httpDownload(const std::string& url,
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS,       0L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,   1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,          (long)m_timeoutSeconds);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT,        "FastDLTool/1.1");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,        "FastDLTool/1.2");
     curl_easy_setopt(curl, CURLOPT_FAILONERROR,      1L);
 
     CURLcode res = curl_easy_perform(curl);
