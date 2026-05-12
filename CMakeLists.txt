@@ -112,7 +112,7 @@ if(WIN32)
 
         target_sources(FastDLTool PRIVATE "${UTF8_MANIFEST_OBJ}")
 
-    else()  # MSVC / other Windows compiler
+    else()  # MSVC
         find_path(BZ2_INCLUDE_DIR bzlib.h)
         find_library(BZ2_LIB bz2)
 
@@ -136,8 +136,9 @@ if(WIN32)
   </application>
 </assembly>
 ")
+
         set_target_properties(FastDLTool PROPERTIES
-            VS_USER_PROPS "${UTF8_MANIFEST_XML}")
+            VS_MANIFESTFILE "${UTF8_MANIFEST_XML}")
 
     endif()  # MINGW
 
