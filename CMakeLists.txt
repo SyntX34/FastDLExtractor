@@ -73,23 +73,45 @@ if(WIN32)
             -static-libstdc++
         )
 
-        set(UTF8_MANIFEST_RC "${CMAKE_CURRENT_BINARY_DIR}/utf8_manifest.rc")
-        file(WRITE "${UTF8_MANIFEST_RC}"
-"// UTF-8 active code page manifest — embedded inline, no external file\n\
-1 24\n\
-BEGIN\n\
-  \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\" standalone=\\\"yes\\\"?>\\r\\n\"\n\
-  \"<assembly xmlns=\\\"urn:schemas-microsoft-com:asm.v1\\\" manifestVersion=\\\"1.0\\\">\\r\\n\"\n\
-  \"  <application>\\r\\n\"\n\
-  \"    <windowsSettings>\\r\\n\"\n\
-  \"      <activeCodePage xmlns=\\\"http://schemas.microsoft.com/SMI/2019/WindowsSettings\\\">UTF-8</activeCodePage>\\r\\n\"\n\
-  \"    </windowsSettings>\\r\\n\"\n\
-  \"  </application>\\r\\n\"\n\
-  \"</assembly>\\r\\n\"\n\
-END\n")
+        get_filename_component(_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        find_program(WINDRES_EXE
+            NAMES windres windres.exe
+            HINTS "${_COMPILER_DIR}"
+            REQUIRED
+        )
 
-        set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} --no-preprocess")
-        target_sources(FastDLTool PRIVATE "${UTF8_MANIFEST_RC}")
+        set(UTF8_MANIFEST_XML "${CMAKE_CURRENT_BINARY_DIR}/utf8.manifest")
+        set(UTF8_MANIFEST_OBJ "${CMAKE_CURRENT_BINARY_DIR}/utf8_manifest.o")
+
+        file(WRITE "${UTF8_MANIFEST_XML}"
+"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">
+  <application>
+    <windowsSettings>
+      <activeCodePage xmlns=\"http://schemas.microsoft.com/SMI/2019/WindowsSettings\">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>
+")
+
+        set(UTF8_MANIFEST_RC "${CMAKE_CURRENT_BINARY_DIR}/utf8_manifest.rc")
+        string(REPLACE "\\" "/" _MANIFEST_PATH_FWD "${UTF8_MANIFEST_XML}")
+        file(WRITE "${UTF8_MANIFEST_RC}" "1 24 \"${_MANIFEST_PATH_FWD}\"\n")
+
+        add_custom_command(
+            OUTPUT  "${UTF8_MANIFEST_OBJ}"
+            COMMAND "${WINDRES_EXE}"
+                    --no-preprocess
+                    -J rc
+                    -O coff
+                    -i "${UTF8_MANIFEST_RC}"
+                    -o "${UTF8_MANIFEST_OBJ}"
+            DEPENDS "${UTF8_MANIFEST_RC}" "${UTF8_MANIFEST_XML}"
+            COMMENT "Embedding UTF-8 manifest (windres --no-preprocess)"
+            VERBATIM
+        )
+
+        target_sources(FastDLTool PRIVATE "${UTF8_MANIFEST_OBJ}")
 
     else()
         find_path(BZ2_INCLUDE_DIR bzlib.h)
@@ -101,6 +123,7 @@ END\n")
         else()
             message(FATAL_ERROR "BZip2 not found for MSVC")
         endif()
+
         target_compile_options(FastDLTool PRIVATE /utf-8)
 
         set(UTF8_MANIFEST_XML "${CMAKE_CURRENT_BINARY_DIR}/utf8.manifest")
