@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release  (CLI + GUI)
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number for the release (e.g., 1.0.0)'
+        description: 'Version number (e.g. 1.1.0)'
         required: true
-        default: '1.0.0'
+        default: '1.1.0'
       prerelease:
         description: 'Mark as prerelease'
         required: false
@@ -21,8 +21,9 @@ env:
 permissions:
   contents: write
 
+
 jobs:
-  build-linux:
+  build-cli-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,96 +31,221 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ build-essential libbz2-dev libcurl4-gnutls-dev nlohmann-json3-dev
+          sudo apt-get install -y cmake g++ build-essential \
+            libbz2-dev libcurl4-gnutls-dev nlohmann-json3-dev
 
-      - name: Configure CMake
+      - name: Build CLI
         run: |
-          mkdir build-linux
-          cd build-linux
+          mkdir build-cli-linux && cd build-cli-linux
           cmake .. -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: |
-          cd build-linux
           make -j$(nproc)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: fastdl-tool-linux
-          path: build-linux/FastDLTool
+          name: fastdl-cli-linux
+          path: build-cli-linux/FastDLTool
           retention-days: 7
 
-  build-windows:
+  build-cli-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install vcpkg deps
+        run: |
+          git clone --depth=1 https://github.com/Microsoft/vcpkg.git
+          cd vcpkg
+          .\bootstrap-vcpkg.bat -disableMetrics
+          .\vcpkg integrate install
+          .\vcpkg install bzip2:x64-windows nlohmann-json:x64-windows --classic --recurse
+        shell: pwsh
 
-      - name: Install vcpkg and dependencies
+      - name: Build CLI
+        run: |
+          mkdir build-cli-windows && cd build-cli-windows
+          cmake .. -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+          cmake --build . --config Release
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fastdl-cli-windows
+          path: build-cli-windows/Release/FastDLTool.exe
+          retention-days: 7
+
+  build-gui-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ build-essential \
+            libbz2-dev libcurl4-gnutls-dev
+
+      - name: Download nlohmann/json
+        run: |
+          mkdir -p third_party/nlohmann
+          curl -fsSL \
+            https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp \
+            -o third_party/nlohmann/json.hpp
+
+      - name: Copy sources to gui/src
+        run: |
+          mkdir -p gui/src gui/third_party
+          cp src/FastDLDownloader.cpp src/FastDLDownloader.h \
+             src/ConfigManager.cpp    src/ConfigManager.h \
+             src/Utils.h src/ProgressBar.h gui/src/
+          cp -r third_party/nlohmann gui/third_party/
+
+      - name: Build shared library
+        run: |
+          cd gui
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --parallel $(nproc)
+          cp libfastdl.so ../libfastdl.so
+
+      - name: Package GUI bundle
+        run: |
+          mkdir -p dist-gui-linux
+          cp gui/libfastdl.so   dist-gui-linux/
+          cp gui/fastdl_gui.py  dist-gui-linux/
+          echo "#!/usr/bin/env bash
+          cd \"\$(dirname \"\$0\")\"
+          pip install PyQt6 -q
+          python fastdl_gui.py \"\$@\"" > dist-gui-linux/run_gui.sh
+          chmod +x dist-gui-linux/run_gui.sh
+          tar -czf FastDLTool-GUI-linux-x86_64.tar.gz -C dist-gui-linux .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fastdl-gui-linux
+          path: FastDLTool-GUI-linux-x86_64.tar.gz
+          retention-days: 7
+
+  build-gui-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Download nlohmann/json
+        run: |
+          New-Item -ItemType Directory -Force -Path third_party\nlohmann
+          Invoke-WebRequest `
+            https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp `
+            -OutFile third_party\nlohmann\json.hpp
+        shell: pwsh
+
+      - name: Install vcpkg deps
         run: |
           git clone --depth=1 https://github.com/Microsoft/vcpkg.git
           cd vcpkg
           .\bootstrap-vcpkg.bat -disableMetrics
           .\vcpkg integrate install
           .\vcpkg install bzip2:x64-windows --classic --recurse
-          .\vcpkg install nlohmann-json:x64-windows --classic --recurse
         shell: pwsh
 
-      - name: Configure CMake
+      - name: Copy sources
         run: |
-          mkdir build-windows
-          cd build-windows
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
+          New-Item -ItemType Directory -Force -Path gui\src, gui\third_party
+          foreach ($f in @("FastDLDownloader.cpp","FastDLDownloader.h",
+                           "ConfigManager.cpp","ConfigManager.h",
+                           "Utils.h","ProgressBar.h")) {
+            Copy-Item "src\$f" "gui\src\$f"
+          }
+          Copy-Item -Recurse -Force third_party\nlohmann gui\third_party\nlohmann
+        shell: pwsh
 
-      - name: Build
+      - name: Build shared library
         run: |
-          cd build-windows
+          cd gui
+          New-Item -ItemType Directory -Force -Path build-win
+          cd build-win
+          cmake .. -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows -A x64
           cmake --build . --config Release
+        shell: pwsh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package GUI bundle
+        run: |
+          New-Item -ItemType Directory -Force -Path dist-gui-win
+          $dll = Get-ChildItem -Path gui\build-win -Filter "fastdl.dll" -Recurse | Select-Object -First 1
+          Copy-Item $dll.FullName dist-gui-win\fastdl.dll
+          Copy-Item gui\fastdl_gui.py dist-gui-win\fastdl_gui.py
+          '@echo off
+          pip install PyQt6 -q
+          python "%~dp0fastdl_gui.py" %*' | Out-File dist-gui-win\run_gui.bat -Encoding ASCII
+          Compress-Archive -Path dist-gui-win\* -DestinationPath FastDLTool-GUI-windows-x86_64.zip
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: fastdl-tool-windows
-          path: build-windows/Release/FastDLTool.exe
+          name: fastdl-gui-windows
+          path: FastDLTool-GUI-windows-x86_64.zip
           retention-days: 7
 
   release:
-    needs: [build-linux, build-windows]
+    needs:
+      - build-cli-linux
+      - build-cli-windows
+      - build-gui-linux
+      - build-gui-windows
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
     steps:
-      - name: Download Linux artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fastdl-tool-linux
-          path: dist/linux
+          path: dist
 
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: fastdl-tool-windows
-          path: dist/windows
-
-      - name: Prepare release
+      - name: Prepare release files
         run: |
-          cp dist/linux/FastDLTool FastDLTool-linux-x86_64
-          cp dist/windows/FastDLTool.exe FastDLTool-windows-x86_64.exe
+          # CLI
+          cp dist/fastdl-cli-linux/FastDLTool      FastDLTool-linux-x86_64
+          cp dist/fastdl-cli-windows/FastDLTool.exe FastDLTool-windows-x86_64.exe
           chmod +x FastDLTool-linux-x86_64
-          echo "Release files prepared:"
-          ls -lah FastDLTool-*
-        shell: bash
+
+          # GUI bundles
+          cp dist/fastdl-gui-linux/FastDLTool-GUI-linux-x86_64.tar.gz   .
+          cp dist/fastdl-gui-windows/FastDLTool-GUI-windows-x86_64.zip  .
+
+          echo "Release assets:"
+          ls -lah FastDLTool*
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
+          body: |
+            ## FastDL Tool v${{ env.VERSION }}
+
+            ### Downloads
+
+            | File | Description |
+            |------|-------------|
+            | `FastDLTool-linux-x86_64` | CLI – Linux (no deps) |
+            | `FastDLTool-windows-x86_64.exe` | CLI – Windows (no deps) |
+            | `FastDLTool-GUI-linux-x86_64.tar.gz` | GUI bundle – Linux |
+            | `FastDLTool-GUI-windows-x86_64.zip` | GUI bundle – Windows |
+
+            ### GUI Quick Start
+            1. Extract the GUI bundle
+            2. `pip install PyQt6`
+            3. Run `run_gui.sh` (Linux) or `run_gui.bat` (Windows)
           files: |
             FastDLTool-linux-x86_64
             FastDLTool-windows-x86_64.exe
+            FastDLTool-GUI-linux-x86_64.tar.gz
+            FastDLTool-GUI-windows-x86_64.zip
           generate_release_notes: true
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
