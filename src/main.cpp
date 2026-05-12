@@ -1,3 +1,10 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #include "ConfigManager.h"
 #include "FastDLDownloader.h"
 #include "ProgressBar.h"
@@ -23,10 +30,23 @@ static void clearLine() {
     std::cout << "\r\033[K";
 }
 
+static void enableUtf8Console() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD mode = 0;
+        if (GetConsoleMode(hOut, &mode))
+            SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+#endif
+}
+
 static void printBanner() {
     std::cout << "\n";
     std::cout << "+------------------------------------------------------------------+\n";
-    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.0           |\n";
+    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.1           |\n";
     std::cout << "|           Windows + Linux  |  MinGW / GCC  |  C++17             |\n";
     std::cout << "|   Author: SyntX | https://github.com/SyntX34/FastDLExtractor    |\n";
     std::cout << "+------------------------------------------------------------------+\n\n";
@@ -36,20 +56,25 @@ static void printHelp(const char* argv0) {
     std::cout << "Usage: " << argv0 << " [OPTIONS]\n\n";
     std::cout << "  -c, --config  <path>   Config file  (default: configs/servers.json)\n";
     std::cout << "  -s, --server  <index>  Server index (skips interactive prompt)\n";
-    std::cout << "  -d, --download <path>  Download a specific relative path\n";
+    std::cout << "  -d, --download <path>  Download a specific relative path or folder/\n";
     std::cout << "  -o, --output  <dir>    Output directory (default: game_path from config)\n";
     std::cout << "  -t, --threads <n>      Parallel download threads (default: 4)\n";
     std::cout << "  -f, --force            Force re-download even if file exists\n";
     std::cout << "  -h, --help             This help text\n";
     std::cout << "  -v, --version          Version info\n\n";
+    std::cout << "Config download_paths modes:\n";
+    std::cout << "  Folders   : \"maps/\"              -- crawl & sync entire folder\n";
+    std::cout << "  Files     : \"maps/de_dust2.bsp\"  -- specific files only\n";
+    std::cout << "  (empty)   : crawl all resource-type folders from FastDL root\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << argv0 << "                                 # interactive mode\n";
-    std::cout << "  " << argv0 << " -s 0                            # download missing files for server 0\n";
-    std::cout << "  " << argv0 << " -s 0 -d maps/de_dust2.bsp       # download specific missing file\n\n";
+    std::cout << "  " << argv0 << " -s 0                            # sync missing files for server 0\n";
+    std::cout << "  " << argv0 << " -s 0 -d maps/de_dust2.bsp       # download one file\n";
+    std::cout << "  " << argv0 << " -s 0 -d maps/ -f                # re-download entire maps folder\n\n";
 }
 
 static void printVersion() {
-    std::cout << "FastDL Tool  v1.0.0\n";
+    std::cout << "FastDL Tool  v1.1\n";
     std::cout << "Built with C++17 | CMake | MinGW/GCC\n";
     std::cout << "MIT License\n";
 }
@@ -68,7 +93,7 @@ public:
         m_current = filename;
         std::string disp = fs::path(filename).filename().string();
         if (disp.size() > 60) disp = "..." + disp.substr(disp.size()-57);
-        std::cout << "\n  >> " << disp << "\n";
+        std::cout << "\n  [>>] " << disp << "\n";
     }
 
     void onFileProgress(const std::string& /*filename*/,
@@ -78,12 +103,9 @@ public:
                         double speed,
                         double eta) override {
         std::lock_guard<std::mutex> lk(m_mx);
-        double overall = 0.0;
-        if (m_expected > 0) {
-            overall = ((double)m_done + progress) / (double)m_expected;
-        } else {
-            overall = progress;
-        }
+        double overall = (m_expected > 0)
+                       ? ((double)m_done + progress) / (double)m_expected
+                       : progress;
         m_bar.setProgress(overall);
 
         clearLine();
@@ -132,6 +154,8 @@ public:
     size_t errors()     const { return m_errors; }
     size_t totalBytes() const { return m_totalBytes; }
 
+    void setExpected(size_t n) { m_expected = n; }
+
 private:
     std::mutex  m_mx;
     ProgressBar m_bar;
@@ -142,30 +166,35 @@ private:
     std::string m_current;
 };
 
-static std::vector<std::string> filterMissingFiles(const std::vector<std::string>& files, 
-                                                     const std::string& gamePath) {
+static std::vector<std::string> filterMissingFiles(
+        const std::vector<std::string>& files,
+        const std::string& gamePath,
+        bool verbose = true) {
+
     std::vector<std::string> missing;
-    std::set<std::string> missingSet;
-    
-    std::cout << "\n  Checking existing files...\n";
-    
+
+    if (verbose)
+        std::cout << "\n  Checking existing files...\n";
+
     for (const auto& file : files) {
         fs::path fullPath = fs::path(gamePath) / file;
-        
         bool exists = fs::exists(fullPath);
-        
+
         if (!exists) {
             missing.push_back(file);
-            missingSet.insert(file);
-            std::cout << "    [MISSING] " << file << "\n";
+            if (verbose)
+                std::cout << "    [MISSING] " << file << "\n";
         } else {
-            std::cout << "    [EXISTS]  " << file << "\n";
+            if (verbose)
+                std::cout << "    [EXISTS]  " << file << "\n";
         }
     }
-    
-    std::cout << "\n  Summary: " << missing.size() << " files missing, "
-              << (files.size() - missing.size()) << " files already present.\n";
-    
+
+    if (verbose) {
+        std::cout << "\n  Summary: " << missing.size() << " files missing, "
+                  << (files.size() - missing.size()) << " files already present.\n";
+    }
+
     return missing;
 }
 
@@ -174,26 +203,31 @@ static void createExampleConfig(ConfigManager& cm, const std::string& path) {
 
     ServerConfig cs1;
     cs1.id           = "css_server1";
-    cs1.name         = "CS:Source — My Server";
+    cs1.name         = "CS:Source - My Server";
     cs1.fastdlUrl    = "http://fastdl.example.com/cstrike/";
     cs1.gamePath     = "C:/Program Files (x86)/Steam/steamapps/common/Counter-Strike Source/cstrike";
-    cs1.resourceTypes = {".bsp", ".mdl", ".vtx", ".vvd", ".phy", ".wav", ".mp3", ".png", ".vtf", ".vmt"};
+    cs1.resourceTypes = {".bsp", ".mdl", ".vtx", ".vvd", ".phy", ".wav", ".mp3",
+                         ".png", ".vtf", ".vmt", ".dx80.vtx", ".dx90.vtx", ".sw.vtx",
+                         ".nav", ".pcf"};
     cm.addServer(cs1);
-    
-    cm.addDownloadPath("css_server1", "maps/de_dust2.bsp");
-    cm.addDownloadPath("css_server1", "maps/de_inferno.bsp");
+
+    cm.addDownloadPath("css_server1", "maps/");
+    cm.addDownloadPath("css_server1", "materials/");
+    cm.addDownloadPath("css_server1", "models/");
+    cm.addDownloadPath("css_server1", "sound/");
 
     cm.saveToFile(path);
 }
 
 int main(int argc, char* argv[]) {
+    enableUtf8Console();
     printBanner();
 
-    std::string configPath   = "configs/servers.json";
-    std::string outputDir    = "";  // Empty means use game_path from config
+    std::string configPath  = "configs/servers.json";
+    std::string outputDir;
     std::string specificPath;
-    int         serverIndex  = -1;
-    int         numThreads   = 4;
+    int         serverIndex    = -1;
+    int         numThreads     = 4;
     bool        forceRedownload = false;
 
     for (int i = 1; i < argc; i++) {
@@ -201,7 +235,7 @@ int main(int argc, char* argv[]) {
         if (a == "-h" || a == "--help")    { printHelp(argv[0]); return 0; }
         if (a == "-v" || a == "--version") { printVersion();     return 0; }
         if (a == "-f" || a == "--force")   { forceRedownload = true; continue; }
-        
+
         auto next = [&](const char* flag) -> std::string {
             if (i + 1 >= argc) {
                 std::cerr << "Missing value for " << flag << "\n";
@@ -209,12 +243,12 @@ int main(int argc, char* argv[]) {
             }
             return argv[++i];
         };
-        
-        if (a == "-c" || a == "--config")   configPath   = next("-c");
-        else if (a == "-s" || a == "--server")  serverIndex  = std::stoi(next("-s"));
+
+        if      (a == "-c" || a == "--config")   configPath   = next("-c");
+        else if (a == "-s" || a == "--server")   serverIndex  = std::stoi(next("-s"));
         else if (a == "-d" || a == "--download") specificPath = next("-d");
-        else if (a == "-o" || a == "--output")  outputDir    = next("-o");
-        else if (a == "-t" || a == "--threads") numThreads   = std::stoi(next("-t"));
+        else if (a == "-o" || a == "--output")   outputDir    = next("-o");
+        else if (a == "-t" || a == "--threads")  numThreads   = std::stoi(next("-t"));
         else { std::cerr << "Unknown option: " << a << "\n"; return 1; }
     }
 
@@ -246,19 +280,18 @@ int main(int argc, char* argv[]) {
             std::cout << "         URL  : " << servers[i].fastdlUrl << "\n";
             std::cout << "         Path : " << servers[i].gamePath  << "\n";
             auto paths = cm.getDownloadPaths(servers[i].id);
-            if (!paths.empty()) {
-                std::cout << "         Pre-configured files: " << paths.size() << "\n";
-            }
+            if (!paths.empty())
+                std::cout << "         Download paths : " << paths.size() << "\n";
             std::cout << "\n";
         }
 
         while (true) {
-            std::cout << "  Select server [0–" << (servers.size()-1) << "]: ";
+            std::cout << "  Select server [0-" << (servers.size()-1) << "]: ";
             int choice = -1;
             if (!(std::cin >> choice) || choice < 0 || choice >= (int)servers.size()) {
                 std::cin.clear();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::cout << "  Invalid — please enter a number between 0 and "
+                std::cout << "  Invalid -- please enter a number between 0 and "
                           << (servers.size()-1) << "\n";
                 continue;
             }
@@ -267,64 +300,114 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (outputDir.empty()) {
-        outputDir = chosen.gamePath;
-    }
-    
-    if (outputDir.empty()) {
-        outputDir = "downloads";
-    }
+    if (outputDir.empty()) outputDir = chosen.gamePath;
+    if (outputDir.empty()) outputDir = "downloads";
 
     std::cout << "\n  Server  : " << chosen.name     << "\n";
     std::cout << "  FastDL  : " << chosen.fastdlUrl  << "\n";
-    std::cout << "  Game    : " << chosen.gamePath   << "\n";
     std::cout << "  Output  : " << outputDir          << "\n";
     std::cout << "  Threads : " << numThreads          << "\n";
-    if (forceRedownload) {
-        std::cout << "  Mode    : Force re-download (ignoring existing files)\n";
-    }
+    if (forceRedownload)
+        std::cout << "  Mode    : Force re-download (all files)\n";
+    else
+        std::cout << "  Mode    : Smart sync (missing files only)\n";
 
-    std::vector<std::string> toDownload;
+    FastDLDownloader dl(chosen.fastdlUrl, outputDir, numThreads);
+    dl.setResourceTypes(chosen.resourceTypes);
+
+    std::vector<std::string> configPaths;
     if (!specificPath.empty()) {
-        toDownload.push_back(specificPath);
+        configPaths.push_back(specificPath);
     } else {
-        toDownload = cm.getDownloadPaths(chosen.id);
+        configPaths = cm.getDownloadPaths(chosen.id);
     }
 
-    if (toDownload.empty()) {
-        std::cout << "\n  No files queued.\n";
+    if (configPaths.empty()) {
+        std::cout << "\n  No download paths configured.\n";
         std::cout << "  Hint: use  -d \"maps/de_dust2.bsp\"  to download a specific file,\n";
-        std::cout << "        or add paths to  download_paths." << chosen.id
-                  << "  in " << configPath << "\n\n";
+        std::cout << "        or   -d \"maps/\"               to sync an entire folder,\n";
+        std::cout << "        or add paths to download_paths." << chosen.id
+                  << " in " << configPath << "\n\n";
         return 0;
     }
 
-    std::vector<std::string> filesToDownload;
-    if (forceRedownload) {
-        filesToDownload = toDownload;
-        std::cout << "\n  Force mode: Will re-download all " << filesToDownload.size() << " files.\n";
-    } else {
-        filesToDownload = filterMissingFiles(toDownload, outputDir);
+    std::vector<std::string> expandedFiles;
+    std::vector<std::string> folderEntries;
+    std::vector<std::string> fileEntries;
+
+    for (const auto& p : configPaths) {
+        if (!p.empty() && p.back() == '/')
+            folderEntries.push_back(p);
+        else
+            fileEntries.push_back(p);
     }
 
-    if (filesToDownload.empty()) {
-        std::cout << "\n  All files already exist! Nothing to download.\n\n";
+    expandedFiles.insert(expandedFiles.end(), fileEntries.begin(), fileEntries.end());
+
+    if (!folderEntries.empty()) {
+        std::cout << "\n  Crawling " << folderEntries.size()
+                  << " folder(s) on FastDL server...\n";
+        for (const auto& folder : folderEntries) {
+            std::cout << "    Listing: " << chosen.fastdlUrl << folder << " ... ";
+            std::cout.flush();
+            auto found = dl.fetchDirectoryListing(folder);
+            std::cout << found.size() << " files found\n";
+            expandedFiles.insert(expandedFiles.end(), found.begin(), found.end());
+        }
+    }
+
+    {
+        std::set<std::string> seen;
+        std::vector<std::string> deduped;
+        for (const auto& f : expandedFiles) {
+            if (seen.insert(f).second) deduped.push_back(f);
+        }
+        expandedFiles = std::move(deduped);
+    }
+
+    std::cout << "\n  Total files on server matching resource types: "
+              << expandedFiles.size() << "\n";
+
+    if (expandedFiles.empty()) {
+        std::cout << "  Nothing to download.\n\n";
+        return 0;
+    }
+
+    std::vector<std::string> toDownload;
+    size_t alreadyPresent = 0;
+
+    if (forceRedownload) {
+        toDownload = expandedFiles;
+        std::cout << "  Force mode: queuing all " << toDownload.size() << " files.\n";
+    } else {
+        bool verbose = (expandedFiles.size() <= 50);
+        if (!verbose)
+            std::cout << "  Checking local files...\n";
+
+        toDownload = filterMissingFiles(expandedFiles, outputDir, verbose);
+        alreadyPresent = expandedFiles.size() - toDownload.size();
+
+        if (!verbose) {
+            std::cout << "  Already present : " << alreadyPresent << "\n";
+            std::cout << "  Missing         : " << toDownload.size() << "\n";
+        }
+    }
+
+    if (toDownload.empty()) {
+        std::cout << "\n  All files are up to date! Nothing to download.\n\n";
         return 0;
     }
 
     fs::create_directories(outputDir);
 
-    auto progress = std::make_shared<DownloadProgress>(filesToDownload.size());
-
-    FastDLDownloader dl(chosen.fastdlUrl, outputDir, numThreads);
-    dl.setResourceTypes(chosen.resourceTypes);
+    auto progress = std::make_shared<DownloadProgress>(toDownload.size());
     dl.setProgressCallback(progress);
 
-    std::cout << "\n  Queuing " << filesToDownload.size() << " file(s) for download...\n";
+    std::cout << "\n  Queuing " << toDownload.size() << " missing file(s)...\n";
 
     auto wallStart = std::chrono::steady_clock::now();
 
-    for (const auto& path : filesToDownload) {
+    for (const auto& path : toDownload) {
         if (!dl.downloadFile(path)) {
             std::cerr << "  Skipped (extension filtered): " << path << "\n";
         }
@@ -336,21 +419,20 @@ int main(int argc, char* argv[]) {
     double elapsed = std::chrono::duration<double>(wallEnd - wallStart).count();
 
     std::cout << "\n";
-    std::cout << " ┌────────────────────────────────────┐\n";
-    std::cout << " │  Download Summary                  │\n";
-    std::cout << " ├────────────────────────────────────┤\n";
-    std::cout << " │  Files downloaded: " << std::setw(13) << progress->done()   << " │\n";
-    std::cout << " │  Files skipped   : " << std::setw(13) << (toDownload.size() - filesToDownload.size()) << " │\n";
-    std::cout << " │  Errors          : " << std::setw(13) << progress->errors() << " │\n";
-    std::cout << " │  Total received  : " << std::setw(13) << formatBytes(progress->totalBytes()) << " │\n";
-    std::cout << " │  Elapsed time    : " << std::setw(13) << formatDuration(elapsed) << " │\n";
+    std::cout << " +--------------------------------------+\n";
+    std::cout << " |  Download Summary                    |\n";
+    std::cout << " +--------------------------------------+\n";
+    std::cout << " |  Files downloaded : " << std::setw(14) << progress->done()   << " |\n";
+    std::cout << " |  Already present  : " << std::setw(14) << alreadyPresent     << " |\n";
+    std::cout << " |  Errors           : " << std::setw(14) << progress->errors() << " |\n";
+    std::cout << " |  Total received   : " << std::setw(14) << formatBytes(progress->totalBytes()) << " |\n";
+    std::cout << " |  Elapsed time     : " << std::setw(14) << formatDuration(elapsed) << " |\n";
     if (elapsed > 0 && progress->totalBytes() > 0) {
         double avgSpeed = (double)progress->totalBytes() / elapsed;
-        std::cout << " │  Avg speed       : " << std::setw(13) << formatSpeed(avgSpeed) << " │\n";
+        std::cout << " |  Avg speed        : " << std::setw(14) << formatSpeed(avgSpeed) << " |\n";
     }
-    std::cout << " ├────────────────────────────────────┤\n";
-    std::cout << " │  Output directory: " << outputDir << "\n";
-    std::cout << " └────────────────────────────────────┘\n\n";
+    std::cout << " +--------------------------------------+\n";
+    std::cout << "   Output: " << outputDir << "\n\n";
 
     return (progress->errors() == 0) ? 0 : 2;
 }

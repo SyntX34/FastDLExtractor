@@ -8,7 +8,7 @@
 
 enum class ProgressBarStyle {
     SIMPLE,           // [=====>   ] 60%
-    FULL,             // Unicode blocks with time
+    FULL,             // ASCII blocks with time
     PERCENTAGE_ONLY   // 60%
 };
 
@@ -73,9 +73,9 @@ private:
         int filled = static_cast<int>(m_width * m_progress);
         std::string bar = "[";
         for (int i = 0; i < m_width; i++) {
-            if      (i < filled)                   bar += "\xE2\x96\x88"; // █ (UTF-8)
-            else if (i == filled && m_progress < 1.0) bar += ">";
-            else                                   bar += "\xE2\x96\x91"; // ░
+            if (i < filled) bar += '=';
+            else if (i == filled && m_progress < 1.0) bar += '>';
+            else bar += ' ';
         }
 
         char pct[32];

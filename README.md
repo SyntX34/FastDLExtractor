@@ -1,88 +1,201 @@
-# FastDL Tool
+FastDL Tool · Game File Downloader · v1.0.0
+Windows + Linux | MinGW / GCC | C++17
+Author: SyntX · github.com/SyntX34/FastDLExtractor
 
-A cross-platform CLI tool for downloading files from a FastDL server (commonly used with Source Engine games like Garry's Mod, CS:Source, TF2, etc.). Supports `.bz2` decompression, multi-threaded downloads, multiple server configs, and live progress display.
+A cross-platform CLI tool for syncing files from a FastDL server to your local game installation. Built for Source Engine games (CS:Source, Garry's Mod, TF2, …). Automatically decompresses .bz2 files, downloads in parallel, and only grabs what you're missing.
 
 ---
 
 ## Features
 
-- **Multi-threaded downloads** — configurable parallel workers (default: 4)
-- **BZ2 decompression** — automatically detects and extracts `.bz2` files (FastDL convention)
-- **Fallback logic** — tries `.bz2` first, falls back to plain file if not found
-- **Multiple server profiles** — config file holds as many servers as you want
-- **Interactive server selection** — prompts if you have multiple servers
-- **Live progress bar** — per-file progress, speed, ETA, overall bar
-- **Extension filtering** — only download the file types you want
-- **Pre-configured download lists** — per-server lists of paths in the config
-- **Single static binary** on Windows (MinGW `-static` flags, no DLL dependencies)
+| Feature | Description |
+|---------|-------------|
+| **Smart sync** | Compares server file list against your local game folder — only downloads what's missing |
+| **Folder crawl** | Point it at a directory on the FastDL server; it recursively lists every file |
+| **Multi-threaded** | Configurable parallel workers (default: 4, max: 16) |
+| **BZ2 auto-extract** | Fetches .bz2, decompresses, deletes the archive — fully transparent |
+| **Fallback logic** | Tries .bz2 first, falls back to the plain file if not found |
+| **Extension filter** | Only downloads the file types listed in `resource_types` |
+| **Multiple servers** | One config file, unlimited server profiles |
+| **Live progress** | Per-file speed, ETA, overall progress bar |
+| **Static binary** | Windows build links everything statically — no DLL hell |
+| **Unicode console** | UTF-8 manifest embedded — server names with special characters display correctly |
 
 ---
 
 ## Building
 
-### Windows (MinGW-w64)
+### Windows (MinGW-w64 / MSYS2)
 
 **Prerequisites:**
-- [MinGW-w64](https://github.com/niXman/mingw-builds-binaries/releases) installed at `C:\mingw64`
-- [CMake](https://cmake.org/download/) in your PATH
-- `libbz2` — included in most MinGW-w64 distributions. If missing:
-  - MSYS2: `pacman -S mingw-w64-x86_64-bzip2`
-  - Or download from [bzip2.org](https://sourceware.org/bzip2/)
+- MinGW-w64 — via [MSYS2](https://www.msys2.org/) (recommended) or [standalone builds](https://github.com/niXman/mingw-builds-binaries/releases)
+- CMake in your PATH
+- bzip2 dev package
 
 ```bat
-cmake -B build_win -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ^
-      -DCMAKE_C_COMPILER=C:\mingw64\bin\gcc.exe ^
-      -DCMAKE_CXX_COMPILER=C:\mingw64\bin\g++.exe
-cmake --build build_win -j4
+:: Install bzip2 inside MSYS2 MinGW shell
+pacman -S mingw-w64-x86_64-bzip2
+
+:: Configure (run from a normal cmd or PowerShell, not MSYS2 shell)
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ^
+      -DCMAKE_C_COMPILER=C:\msys64\mingw64\bin\gcc.exe ^
+      -DCMAKE_CXX_COMPILER=C:\msys64\mingw64\bin\g++.exe
+
+:: Build
+cmake --build build -j4
 ```
+
+> **Note:** If your project folder path contains spaces (e.g. `D:\FastDL Extractor\`), CMake handles this automatically — no manual quoting needed.
+
+Output: `build\FastDLTool.exe` — fully static, no external DLLs required.
 
 ### Linux
 
-**Prerequisites:**
 ```bash
-sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev   # Debian/Ubuntu
-sudo dnf install cmake gcc-c++ libcurl-devel bzip2-devel     # Fedora/RHEL
-sudo pacman -S cmake gcc curl bzip2                           # Arch
-```
+# Debian / Ubuntu
+sudo apt install cmake g++ libcurl4-openssl-dev libbz2-dev
 
+# Fedora / RHEL
+sudo dnf install cmake gcc-c++ libcurl-devel bzip2-devel
+
+# Arch
+sudo pacman -S cmake gcc curl bzip2
+
+# Build
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
 
 ---
 
 ## Configuration
 
-On first run without a config, an example `configs/servers.json` is created:
+On first run, the tool generates an example `configs/servers.json`. Edit it before running again.
+
+### Full example
 
 ```json
 {
     "global_game_path": "",
     "servers": [
         {
-            "id": "gmod_server1",
-            "name": "Garry's Mod — My Server",
-            "fastdl_url": "http://fastdl.example.com/garrysmod/",
-            "game_path": "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod/garrysmod",
-            "resource_types": [".bsp", ".mdl", ".vtx", ".vvd", ".phy", ".wav", ".mp3", ".vtf", ".vmt"]
+            "id": "css_server1",
+            "name": "CS:Source - My Server",
+            "fastdl_url": "https://fastdl.example.com/cstrike/",
+            "game_path": "C:/Program Files (x86)/Steam/steamapps/common/Counter-Strike Source/cstrike/download",
+            "resource_types": [
+                ".bsp", ".nav",
+                ".mdl", ".dx80.vtx", ".dx90.vtx", ".sw.vtx", ".vvd", ".phy",
+                ".vtf", ".vmt",
+                ".wav", ".mp3",
+                ".pcf"
+            ]
         }
     ],
     "download_paths": {
-        "gmod_server1": [
-            "maps/gm_flatgrass.bsp",
-            "materials/myserver/logo.vtf"
+        "css_server1": [
+            "maps/",
+            "materials/",
+            "models/",
+            "sound/"
         ]
     }
 }
 ```
 
-### Config fields
+### Config field reference
 
-| Field | Description |
-|-------|-------------|
-| `id` | Unique ID for this server (used as key in `download_paths`) |
-| `name` | Human-readable display name |
-| `fastdl_url` | Base URL of your FastDL server |
-| `game_path` | Where to copy downloaded files (informational — the tool tells you) |
-| `resource_types` | Extensions to allow (empty = allow everything) |
-| `download_paths` | Per-server list of relative paths to download |
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique key for this server — must match the key in `download_paths` |
+| `name` | string | Display name shown in menus and logs |
+| `fastdl_url` | string | Base URL of your FastDL HTTP server (trailing `/` optional) |
+| `game_path` | string | Local path where downloaded files are written |
+| `resource_types` | array | File extensions to allow. Empty = allow everything |
+| `download_paths` | object | Per-server list of paths to download (see modes below) |
+
+---
+
+## Download Modes
+
+The tool supports three ways to tell it what to download. They can be mixed freely inside the same `download_paths` list.
+
+---
+
+### Mode 1 — Folder sync `"folder/"`
+
+Specify a directory path ending with `/`. The tool will:
+
+1. Fetch the FastDL server's HTML directory listing for that folder
+2. Recursively follow sub-directories
+3. Filter results by `resource_types`
+4. Compare the full list against your local `game_path`
+5. Download only the files that are missing locally
+
+```json
+"download_paths": {
+    "css_server1": [
+        "maps/",
+        "materials/",
+        "models/",
+        "particles/",
+        "sound/"
+    ]
+}
+```
+
+**Best for:** keeping your entire game installation in sync with the server. Run it any time new content is added — it will only fetch what you don't already have.
+
+> Requires the FastDL server to have directory listing enabled (nginx `autoindex on;` or Apache `Options +Indexes`).
+
+---
+
+### Mode 2 — Specific files `"path/to/file.ext"`
+
+List exact relative file paths. Each one is checked locally before queuing — already-present files are skipped automatically (unless `-f` / `--force` is used).
+
+```json
+"download_paths": {
+    "css_server1": [
+        "maps/de_dust2.bsp",
+        "maps/de_inferno.bsp",
+        "maps/de_nuke.bsp",
+        "materials/custom/my_texture.vtf",
+        "sound/ambient/my_sound.mp3"
+    ]
+}
+```
+
+**Best for:** known file lists, when the server doesn't have directory listing enabled, or when you only want a specific subset of content.
+
+---
+
+### Mode 3 — Mixed
+
+Folders and files can coexist in the same list. Duplicates across both types are de-duplicated automatically.
+
+```json
+"download_paths": {
+    "css_server1": [
+        "maps/",
+        "models/weapons/v_knife_ct.mdl",
+        "sound/ui/playerping.wav"
+    ]
+}
+```
+
+---
+
+### No `download_paths` configured
+
+If `download_paths` is empty or absent for a server, the tool prints a hint and exits cleanly — nothing is downloaded silently.
+
+```
+  No download paths configured.
+  Hint: use  -d "maps/de_dust2.bsp"  to download a specific file,
+        or   -d "maps/"              to sync an entire folder,
+        or add paths to download_paths.css_server1 in configs/servers.json
+```
 
 ---
 
@@ -91,49 +204,68 @@ On first run without a config, an example `configs/servers.json` is created:
 ```
 FastDLTool [OPTIONS]
 
-  -c, --config  <path>   Config file  (default: configs/servers.json)
-  -s, --server  <index>  Server index, 0-based (skips interactive prompt)
-  -d, --download <path>  Download a specific relative path
-  -o, --output  <dir>    Output directory (default: downloads/)
-  -t, --threads <n>      Parallel download threads (default: 4)
-  -h, --help             This help text
+  -c, --config  <path>   Config file         (default: configs/servers.json)
+  -s, --server  <index>  Server index 0-N    (skips interactive selection)
+  -d, --download <path>  Single file or folder to download (overrides config)
+  -o, --output  <dir>    Output directory    (default: game_path from config)
+  -t, --threads <n>      Download threads    (default: 4, max: 16)
+  -f, --force            Re-download even if file already exists locally
+  -h, --help             Show this help
   -v, --version          Version info
 ```
 
 ### Examples
 
 ```bash
-# Interactive — choose server from list, uses pre-configured download_paths
+# Interactive — pick server from list, uses download_paths from config
 FastDLTool
 
-# Download one specific file from server 0, 8 threads
-FastDLTool -s 0 -d maps/de_dust2.bsp -t 8
+# Sync missing files for server 0 (non-interactive)
+FastDLTool -s 0
 
-# Use a different config, download to a specific directory
-FastDLTool -c ~/myserver.json -s 1 -o ~/Downloads/fastdl
+# Sync with 8 parallel threads
+FastDLTool -s 0 -t 8
 
-# Download a whole directory of maps (requires paths in config)
-FastDLTool -s 0 -o C:/Games/gmod/garrysmod
+# Download one specific file (missing-file check still applies)
+FastDLTool -s 0 -d maps/de_dust2.bsp
+
+# Crawl and sync an entire folder from the CLI (no config edit needed)
+FastDLTool -s 0 -d maps/
+
+# Force re-download everything, ignoring local files
+FastDLTool -s 0 -f
+
+# Force re-download a specific folder
+FastDLTool -s 0 -d maps/ -f
+
+# Use a different config and output directory
+FastDLTool -c ~/servers.json -s 1 -o ~/Downloads/fastdl
 ```
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0`  | All files downloaded successfully |
-| `1`  | Config error / bad arguments |
-| `2`  | One or more files failed to download |
+| `0` | All files downloaded successfully (or nothing to do) |
+| `1` | Config error or bad arguments |
+| `2` | One or more files failed after all retries |
 
 ---
 
-## How BZ2 works
+## How BZ2 decompression works
 
-FastDL servers typically compress files with bzip2 (`.mdl` → `.mdl.bz2`).
+FastDL servers compress files as .bz2 (e.g. `de_dust2.bsp` → `de_dust2.bsp.bz2`).
 
-1. Tool requests `file.bz2` from the server
-2. If the server returns 200 OK → downloads and decompresses to `file`
-3. If the server returns 404 → retries the plain `file`
-4. Decompression is **streaming** (no memory limit on large files)
+```
+Request: de_dust2.bsp
+   └─ Try:  https://fastdl.example.com/.../de_dust2.bsp.bz2
+        ├─ 200 OK  → download → decompress → de_dust2.bsp  ✓
+        └─ 404     → try plain de_dust2.bsp
+                       ├─ 200 OK  → download as-is  ✓
+                       └─ 404     → error after N retries  ✗
+```
+
+Decompression is **streaming** — no file size limit, minimal memory overhead.
 
 ---
 
@@ -144,12 +276,22 @@ FastDLTool/
 ├── CMakeLists.txt
 ├── README.md
 ├── src/
-│   ├── main.cpp              # CLI entry point, progress display
-│   ├── FastDLDownloader.h/cpp # Thread pool, HTTP (WinHTTP/curl), BZ2
-│   ├── ConfigManager.h/cpp   # JSON config load/save
-│   ├── ProgressBar.h         # Animated progress bar
-│   └── Utils.h               # formatBytes, formatSpeed, formatDuration
+│   ├── main.cpp                  CLI entry, argument parsing, progress UI
+│   ├── FastDLDownloader.h/.cpp   Thread pool, HTTP (WinHTTP / libcurl), BZ2
+│   ├── ConfigManager.h/.cpp      JSON config load / save
+│   ├── ProgressBar.h             Animated progress bar renderer
+│   └── Utils.h                   formatBytes / formatSpeed / formatDuration
 └── third_party/
     └── nlohmann/
-        └── json.hpp          # Bundled minimal JSON (no external dep)
+        └── json.hpp              Single-header JSON library (no extra deps)
 ```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+*Made by [SyntX](https://github.com/SyntX34)*

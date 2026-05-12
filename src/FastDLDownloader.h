@@ -40,6 +40,8 @@ public:
     void setTimeoutSecs(int s)    { m_timeoutSeconds  = s; }
 
     bool downloadFile(const std::string& relativePath);
+    bool fileExistsOnServer(const std::string& relativePath);
+    std::vector<std::string> fetchDirectoryListing(const std::string& relativeDir);
 
     void waitAll();
 
@@ -75,11 +77,18 @@ private:
 
     void workerLoop();
     bool performDownload(const DownloadTask& task);
+
     bool httpDownload(const std::string& url, const std::string& localPath,
                       size_t& outSize, double& outSpeed);
+
+    bool httpFetch(const std::string& url, std::string& body);
+
     bool extractBZ2(const std::string& bz2Path, const std::string& outPath);
 
     bool        shouldDownload(const std::string& filename) const;
     std::string fileExt(const std::string& filename) const;
     std::string joinUrl(const std::string& base, const std::string& rel) const;
+
+    std::vector<std::string> parseHtmlLinks(const std::string& html,
+                                             const std::string& baseHref) const;
 };
