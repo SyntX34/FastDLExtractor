@@ -52,8 +52,8 @@ lib_src, lib_name = _find_lib()
 
 # ─── Analysis ─────────────────────────────────────────────────────────────────
 a = Analysis(
-    [str(_here / "gui" / "fastdl_gui.py")],
-    pathex=[str(_here / "gui")],
+    [str(_here / "fastdl_gui.py")],
+    pathex=[str(_here)],
     binaries=[
         # Bundle the shared library; PyInstaller copies it next to the exe
         (lib_src, "."),
