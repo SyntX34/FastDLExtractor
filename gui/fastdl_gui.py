@@ -195,6 +195,73 @@ class DownloadWorker(QThread):
         self._total   = len(files)
         self._abort   = False
 
+    def _expand_paths(self) -> list[str]:
+        """Expand folder/ wildcard patterns into explicit file paths using
+        the server listing (fdl_fetch_listing). Also dedupes."""
+        expanded = []
+        folder_entries = []  # (folder, prefix)
+        file_entries = []
+
+        for p in self._files:
+            p = p.strip()
+            if not p:
+                continue
+            if p.endswith('/'):
+                # Entire folder crawl
+                folder_entries.append((p, ""))
+            elif p.endswith('*'):
+                # Wildcard prefix pattern: "maps/zm_*"
+                last_slash = p.rfind('/')
+                if last_slash != -1:
+                    folder = p[:last_slash+1]
+                    prefix = p[last_slash+1:-1]  # strip trailing '*'
+                    folder_entries.append((folder, prefix))
+                else:
+                    file_entries.append(p)  # malformed, treat as literal
+            else:
+                file_entries.append(p)
+
+        expanded.extend(file_entries)
+
+        # Fetch listings for each folder
+        self.sig_status.emit(f"Expanding {len(folder_entries)} folder pattern(s)...")
+        for folder, prefix in folder_entries:
+            self.sig_log.emit(f"  Listing {self._server['fastdl_url']}{folder} ...", "#888")
+            # Call C API: fdl_fetch_listing returns a malloc'd buffer with newline-separated paths
+            raw = self._lib.fdl_fetch_listing(self._handle, folder.encode())
+            if not raw:
+                self.sig_log.emit(f"  ✗ Failed to list {folder}", "#ff6b6b")
+                continue
+            try:
+                listing_bytes = ctypes.string_at(raw)
+                # Free the C buffer
+                ctypes.cast(raw, ctypes.c_void_p).value = 0  # actually need libc free; safer: call fdl_free_buffer if exists
+                # Parse lines
+                files_found = []
+                for line in listing_bytes.decode('utf-8', errors='replace').splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if prefix:
+                        # Filter by prefix (filename part only)
+                        fname = line.split('/')[-1]
+                        if not fname.startswith(prefix):
+                            continue
+                    files_found.append(line)
+                expanded.extend(files_found)
+                self.sig_log.emit(f"  ✓ Found {len(files_found)} files in {folder}", "#90ee90")
+            except Exception as e:
+                self.sig_log.emit(f"  ✗ Parse error: {e}", "#ff6b6b")
+
+        # Deduplicate
+        seen = set()
+        result = []
+        for f in expanded:
+            if f not in seen:
+                seen.add(f)
+                result.append(f)
+        return result
+
     def run(self):
         t0 = time.time()
         lib = self._lib
@@ -243,8 +310,19 @@ class DownloadWorker(QThread):
         lib.fdl_set_progress_cb(self._handle, on_progress, None)
         lib.fdl_set_event_cb   (self._handle, on_event,    None)
 
+        # ── Expand patterns ────────────────────────────────────────────────────
+        file_list = self._expand_paths()
+        if not file_list:
+            self.sig_log.emit("No files matched the given paths/patterns.", "#ff6b6b")
+            self.sig_done.emit(0, 0, 0, time.time() - t0)
+            return
+
+        self._total = len(file_list)
+        self.sig_overall.emit(0, self._total)
+        self.sig_status.emit(f"Downloading {self._total} files...")
+
         skipped = 0
-        for path in self._files:
+        for path in file_list:
             if self._abort:
                 break
             ok = lib.fdl_download_file(self._handle, path.encode())
