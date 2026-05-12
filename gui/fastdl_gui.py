@@ -42,38 +42,20 @@ from PyQt6.QtGui import (
 
 
 def _find_lib() -> Optional[str]:
-    """Locate the compiled C++ shared library.
+    """Locate the compiled C++ shared library in the PyInstaller bundle or dev environment."""
+    if hasattr(sys, '_MEIPASS'):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).parent
 
-    Search order:
-      1. sys._MEIPASS  – PyInstaller one-file bundle extraction directory.
-                         The library is bundled here; this MUST be checked
-                         first because in a frozen exe __file__ points at the
-                         exe on disk, not the temp extraction dir, so the old
-                         relative search always missed it.
-      2. Next to the exe / script  – development or unpacked layout.
-      3. build/ sub-directories    – local cmake build output.
-    """
-    search_roots = []
-
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        search_roots.append(Path(meipass))
-
-    here = Path(sys.executable).parent if getattr(sys, "frozen", False) \
-           else Path(__file__).parent
-    search_roots.append(here)
-
-    candidates = []
-    for root in search_roots:
-        candidates += [
-            root / "libfastdl.so",
-            root / "fastdl.dll",
-            root / "libfastdl.dylib",
-            root / "build" / "libfastdl.so",
-            root / "build" / "Release" / "fastdl.dll",
-            root / "build" / "libfastdl.dylib",
-        ]
-
+    candidates = [
+        base / "libfastdl.so",
+        base / "fastdl.dll",
+        base / "libfastdl.dylib",
+        base / "build" / "libfastdl.so",
+        base / "build" / "Release" / "fastdl.dll",
+        base / "build" / "libfastdl.dylib",
+    ]
     for p in candidates:
         if p.exists():
             return str(p)
