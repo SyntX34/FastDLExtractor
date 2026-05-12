@@ -21,16 +21,16 @@ def _find_lib():
     """Return (src_path, dest_name) for the shared library, or raise."""
     candidates = {
         "Windows": [
-            _here / "gui" / "fastdl.dll",
-            _here / "gui" / "build-win" / "Release" / "fastdl.dll",
+            _here / "fastdl.dll",
+            _here / "build-win" / "Release" / "fastdl.dll",
         ],
         "Linux": [
-            _here / "gui" / "libfastdl.so",
-            _here / "gui" / "build" / "libfastdl.so",
+            _here / "libfastdl.so",
+            _here / "build" / "libfastdl.so",
         ],
         "Darwin": [
-            _here / "gui" / "libfastdl.dylib",
-            _here / "gui" / "build" / "libfastdl.dylib",
+            _here / "libfastdl.dylib",
+            _here / "build" / "libfastdl.dylib",
         ],
     }
     platform_name = {
