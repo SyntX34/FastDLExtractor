@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ build-essential libbz2-dev nlohmann-json3-dev
+          sudo apt-get install -y cmake g++ build-essential libbz2-dev libcurl4-gnutls-dev nlohmann-json3-dev
 
       - name: Configure CMake
         run: |
