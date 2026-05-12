@@ -107,11 +107,22 @@ jobs:
       - name: Stage GUI sources
         run: |
           mkdir -p gui/src gui/third_party
+          # Core sources live in src/
           cp src/FastDLDownloader.cpp src/FastDLDownloader.h \
              src/ConfigManager.cpp    src/ConfigManager.h \
              src/Utils.h src/ProgressBar.h \
-             src/fastdl_capi.cpp src/fastdl_capi.h \
              gui/src/
+          # C API bridge lives in the repo root (next to CMakeLists.txt)
+          # Fall back to src/ in case the project is restructured later
+          for f in fastdl_capi.cpp fastdl_capi.h; do
+            if [ -f "$f" ]; then
+              cp "$f" gui/src/
+            elif [ -f "src/$f" ]; then
+              cp "src/$f" gui/src/
+            else
+              echo "ERROR: cannot find $f in root or src/" && exit 1
+            fi
+          done
           cp -r third_party/nlohmann gui/third_party/
 
       - name: Build shared library
@@ -194,13 +205,25 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path gui\src, gui\third_party | Out-Null
+          # Core sources live in src\
           foreach ($f in @(
               "FastDLDownloader.cpp","FastDLDownloader.h",
               "ConfigManager.cpp","ConfigManager.h",
-              "Utils.h","ProgressBar.h",
-              "fastdl_capi.cpp","fastdl_capi.h"
+              "Utils.h","ProgressBar.h"
           )) {
             Copy-Item "src\$f" "gui\src\$f"
+          }
+          # C API bridge lives in the repo root (next to CMakeLists.txt)
+          # Fall back to src\ in case the project is restructured later
+          foreach ($f in @("fastdl_capi.cpp","fastdl_capi.h")) {
+            if (Test-Path $f) {
+              Copy-Item $f "gui\src\$f"
+            } elseif (Test-Path "src\$f") {
+              Copy-Item "src\$f" "gui\src\$f"
+            } else {
+              Write-Host "ERROR: cannot find $f in root or src\"
+              exit 1
+            }
           }
           Copy-Item -Recurse -Force third_party\nlohmann gui\third_party\nlohmann
 
