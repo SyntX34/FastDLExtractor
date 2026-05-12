@@ -112,8 +112,7 @@ jobs:
              src/ConfigManager.cpp    src/ConfigManager.h \
              src/Utils.h src/ProgressBar.h \
              gui/src/
-          # C API bridge lives in src/ alongside the other backend sources
-          cp src/fastdl_capi.cpp src/fastdl_capi.h gui/src/
+          # C API bridge already exists in gui/src/
           cp -r third_party/nlohmann gui/third_party/
 
       - name: Build shared library
@@ -204,9 +203,7 @@ jobs:
           )) {
             Copy-Item "src\$f" "gui\src\$f"
           }
-          # C API bridge lives in src/ alongside the other backend sources
-          Copy-Item "src\fastdl_capi.cpp" "gui\src\fastdl_capi.cpp"
-          Copy-Item "src\fastdl_capi.h"   "gui\src\fastdl_capi.h"
+          # C API bridge already exists in gui\src\
           Copy-Item -Recurse -Force third_party\nlohmann gui\third_party\nlohmann
 
       - name: Build shared library (DLL)
