@@ -16,6 +16,7 @@
 
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <memory>
 #include <mutex>
