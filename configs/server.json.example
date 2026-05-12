@@ -1,0 +1,33 @@
+{
+    "global_game_path": "./game",
+    "servers": [
+        {
+            "id": "csgo_server1",
+            "name": "CS:GO Community Server #1",
+            "fastdl_url": "http://fastdl.example.com/csgo/",
+            "game_path": "./csgo",
+            "resource_types": [".bsp", ".mdl", ".wav", ".vtf", ".vmt", ".nav", ".bz2"]
+        },
+        {
+            "id": "tf2_server1",
+            "name": "TF2 Fun Server",
+            "fastdl_url": "http://fastdl.example.com/tf/",
+            "game_path": "./tf",
+            "resource_types": [".bsp", ".mdl", ".wav", ".vtf", ".vmt", ".pop", ".bz2"]
+        }
+    ],
+    "download_paths": {
+        "csgo_server1": [
+            "maps/de_dust2.bsp",
+            "materials/",
+            "models/",
+            "sound/"
+        ],
+        "tf2_server1": [
+            "maps/pl_badwater.bsp",
+            "materials/",
+            "models/",
+            "sound/"
+        ]
+    }
+}
