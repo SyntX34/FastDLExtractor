@@ -113,14 +113,15 @@ jobs:
              src/Utils.h src/ProgressBar.h \
              gui/src/
           # C API bridge lives in the repo root (next to CMakeLists.txt)
-          # Fall back to src/ in case the project is restructured later
+          # Use $GITHUB_WORKSPACE explicitly to avoid working-directory drift.
+          echo "  Workspace contents (root):" && ls "$GITHUB_WORKSPACE"
           for f in fastdl_capi.cpp fastdl_capi.h; do
-            if [ -f "$f" ]; then
-              cp "$f" gui/src/
-            elif [ -f "src/$f" ]; then
-              cp "src/$f" gui/src/
+            if [ -f "$GITHUB_WORKSPACE/$f" ]; then
+              cp "$GITHUB_WORKSPACE/$f" gui/src/
+            elif [ -f "$GITHUB_WORKSPACE/src/$f" ]; then
+              cp "$GITHUB_WORKSPACE/src/$f" gui/src/
             else
-              echo "ERROR: cannot find $f in root or src/" && exit 1
+              echo "ERROR: cannot find $f in $GITHUB_WORKSPACE or $GITHUB_WORKSPACE/src/" && exit 1
             fi
           done
           cp -r third_party/nlohmann gui/third_party/
@@ -214,14 +215,15 @@ jobs:
             Copy-Item "src\$f" "gui\src\$f"
           }
           # C API bridge lives in the repo root (next to CMakeLists.txt)
-          # Fall back to src\ in case the project is restructured later
+          # Use $env:GITHUB_WORKSPACE explicitly to avoid working-directory drift.
+          Write-Host "  Workspace contents (root):" ; Get-ChildItem $env:GITHUB_WORKSPACE
           foreach ($f in @("fastdl_capi.cpp","fastdl_capi.h")) {
-            if (Test-Path $f) {
-              Copy-Item $f "gui\src\$f"
-            } elseif (Test-Path "src\$f") {
-              Copy-Item "src\$f" "gui\src\$f"
+            if (Test-Path "$env:GITHUB_WORKSPACE\$f") {
+              Copy-Item "$env:GITHUB_WORKSPACE\$f" "gui\src\$f"
+            } elseif (Test-Path "$env:GITHUB_WORKSPACE\src\$f") {
+              Copy-Item "$env:GITHUB_WORKSPACE\src\$f" "gui\src\$f"
             } else {
-              Write-Host "ERROR: cannot find $f in root or src\"
+              Write-Host "ERROR: cannot find $f in $env:GITHUB_WORKSPACE or $env:GITHUB_WORKSPACE\src\"
               exit 1
             }
           }
