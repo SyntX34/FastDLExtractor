@@ -168,7 +168,7 @@ void fdl_wait_all(FDLHandle h) {
 }
 
 void fdl_cancel(FDLHandle h) {
-    (void)h;
+    if (h) static_cast<FDLContext*>(h)->dl->cancel();
 }
 
 long long fdl_total_bytes(FDLHandle h) {
@@ -207,7 +207,7 @@ int fdl_config_save(const char* filepath, const char* json_content) {
 }
 
 const char* fdl_version(void) {
-    return "FastDL Tool v1.2 (GUI edition)";
+    return "FastDL Tool v1.3 (GUI edition)";
 }
 
 } /* extern "C" */

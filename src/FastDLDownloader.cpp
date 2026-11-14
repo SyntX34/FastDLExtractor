@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <unordered_set>
 #include <filesystem>
 #include <chrono>
 #include <thread>
@@ -163,32 +164,88 @@ std::vector<std::string> FastDLDownloader::fetchDirectoryListing(
         const std::string& relativeDir) {
 
     std::vector<std::string> results;
+    if (m_cancelled.load(std::memory_order_relaxed)) return results;
 
-    std::string dir = relativeDir;
-    if (dir.empty() || dir.back() != '/') dir += '/';
+    std::string startDir = relativeDir;
+    if (!startDir.empty() && startDir.back() != '/') startDir += '/';
 
-    std::string url  = joinUrl(m_baseUrl, dir);
-    std::string body;
-    if (!httpFetch(url, body)) return results;
+    std::queue<std::string> dirQueue;
+    std::unordered_set<std::string> visitedDirs;
+    dirQueue.push(startDir);
+    visitedDirs.insert(startDir);
 
-    auto links = parseHtmlLinks(body, dir);
+    std::mutex qMutex;
+    std::condition_variable qCv;
+    int activeWorkers = 0;
 
-    for (const auto& link : links) {
-        if (link.empty()) continue;
+    const int workerCount = std::max(4, m_numThreads);
+    std::vector<std::thread> crawlers;
+    crawlers.reserve(workerCount);
 
-        if (link.back() == '/') {
-            auto sub = fetchDirectoryListing(link);
-            results.insert(results.end(), sub.begin(), sub.end());
-        } else {
-            std::string realName = link;
-            if (realName.size() > 4 &&
-                realName.substr(realName.size() - 4) == ".bz2") {
-                realName = realName.substr(0, realName.size() - 4);
+    for (int i = 0; i < workerCount; ++i) {
+        crawlers.emplace_back([&]() {
+            while (true) {
+                std::string dir;
+                {
+                    std::unique_lock<std::mutex> lk(qMutex);
+                    qCv.wait(lk, [&]() {
+                        return m_cancelled.load(std::memory_order_relaxed) ||
+                               !dirQueue.empty() ||
+                               activeWorkers == 0;
+                    });
+                    if (m_cancelled.load(std::memory_order_relaxed) ||
+                        (dirQueue.empty() && activeWorkers == 0)) {
+                        return;
+                    }
+                    dir = std::move(dirQueue.front());
+                    dirQueue.pop();
+                    ++activeWorkers;
+                }
+
+                std::string url = joinUrl(m_baseUrl, dir);
+                std::string body;
+                std::vector<std::string> subDirs;
+                std::vector<std::string> localFiles;
+
+                if (!m_cancelled.load(std::memory_order_relaxed) && httpFetch(url, body)) {
+                    auto links = parseHtmlLinks(body, dir);
+                    for (const auto& link : links) {
+                        if (m_cancelled.load(std::memory_order_relaxed)) break;
+                        if (link.empty()) continue;
+                        if (link.back() == '/') {
+                            subDirs.push_back(link);
+                        } else {
+                            std::string realName = link;
+                            if (realName.size() > 4 &&
+                                realName.substr(realName.size() - 4) == ".bz2") {
+                                realName = realName.substr(0, realName.size() - 4);
+                            }
+                            if (shouldDownload(realName)) {
+                                localFiles.push_back(std::move(realName));
+                            }
+                        }
+                    }
+                }
+
+                {
+                    std::lock_guard<std::mutex> lk(qMutex);
+                    for (auto& sd : subDirs) {
+                        if (visitedDirs.insert(sd).second) {
+                            dirQueue.push(std::move(sd));
+                        }
+                    }
+                    results.insert(results.end(),
+                                   std::make_move_iterator(localFiles.begin()),
+                                   std::make_move_iterator(localFiles.end()));
+                    --activeWorkers;
+                }
+                qCv.notify_all();
             }
-            if (shouldDownload(realName)) {
-                results.push_back(realName);
-            }
-        }
+        });
+    }
+
+    for (auto& t : crawlers) {
+        if (t.joinable()) t.join();
     }
 
     return results;
@@ -256,6 +313,17 @@ void FastDLDownloader::waitAll() {
     });
 }
 
+void FastDLDownloader::cancel() {
+    m_cancelled.store(true, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        std::queue<DownloadTask> empty;
+        std::swap(m_queue, empty);
+    }
+    m_cv.notify_all();
+    m_doneCv.notify_all();
+}
+
 void FastDLDownloader::workerLoop() {
     while (true) {
         DownloadTask task;
@@ -271,7 +339,9 @@ void FastDLDownloader::workerLoop() {
             m_inFlight++;
         }
 
-        performDownload(task);
+        if (!m_cancelled.load(std::memory_order_relaxed)) {
+            performDownload(task);
+        }
 
         {
             std::unique_lock<std::mutex> lk(m_mutex);
@@ -420,7 +490,7 @@ static bool winHttpOpenRequest(const std::string& url,
 
 bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     HINTERNET hRequest{};
-    if (!winHttpOpenRequest(url, L"GET", 15000, hRequest))
+    if (!winHttpOpenRequest(url, L"GET", 8000, hRequest))
         return false;
 
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
@@ -441,7 +511,7 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     }
 
     std::vector<char> buf(256 * 1024);
-    while (true) {
+    while (!m_cancelled.load(std::memory_order_relaxed)) {
         DWORD read = 0;
         if (!WinHttpReadData(hRequest, buf.data(), (DWORD)buf.size(), &read)) break;
         if (read == 0) break;
@@ -449,6 +519,7 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     }
 
     WinHttpCloseHandle(hRequest);
+    if (m_cancelled.load(std::memory_order_relaxed)) return false;
     return !body.empty();
 }
 
@@ -576,7 +647,7 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteBody);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &ws);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT,       15L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT,       8L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.2");
 
     CURLcode res = curl_easy_perform(curl);

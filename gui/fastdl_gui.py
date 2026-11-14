@@ -16,6 +16,7 @@ Requirements:
 import sys
 import os
 import json
+import fnmatch
 import ctypes
 import ctypes.util
 import platform
@@ -196,10 +197,10 @@ class DownloadWorker(QThread):
         self._abort   = False
 
     def _expand_paths(self) -> list[str]:
-        """Expand folder/ wildcard patterns into explicit file paths using
-        the server listing (fdl_fetch_listing). Also dedupes."""
+        """Expand folder/ and wildcard patterns (e.g. models/*.mdl, maps/zm_*)
+        into explicit file paths using the server listing (fdl_fetch_listing)."""
         expanded = []
-        folder_entries = []  # (folder, prefix)
+        folder_entries = []  # (folder, fnmatch_pattern)
         file_entries = []
 
         for p in self._files:
@@ -209,43 +210,47 @@ class DownloadWorker(QThread):
             if p.endswith('/'):
                 # Entire folder crawl
                 folder_entries.append((p, ""))
-            elif p.endswith('*'):
-                # Wildcard prefix pattern: "maps/zm_*"
+            elif '*' in p or '?' in p:
+                # Wildcard pattern: "models/*.mdl", "maps/zm_*", "sound/weapons/*.wav"
                 last_slash = p.rfind('/')
                 if last_slash != -1:
-                    folder = p[:last_slash+1]
-                    prefix = p[last_slash+1:-1]  # strip trailing '*'
-                    folder_entries.append((folder, prefix))
+                    folder = p[:last_slash + 1]
+                    pattern = p[last_slash + 1:]
                 else:
-                    file_entries.append(p)  # malformed, treat as literal
+                    folder = ""
+                    pattern = p
+                folder_entries.append((folder, pattern))
             else:
                 file_entries.append(p)
 
         expanded.extend(file_entries)
 
         # Fetch listings for each folder
-        self.sig_status.emit(f"Expanding {len(folder_entries)} folder pattern(s)...")
-        for folder, prefix in folder_entries:
+        if folder_entries:
+            self.sig_status.emit(f"Expanding {len(folder_entries)} folder pattern(s)...")
+        for folder, pattern in folder_entries:
+            if self._abort:
+                break
             self.sig_log.emit(f"  Listing {self._server['fastdl_url']}{folder} ...", "#888")
             # Call C API: fdl_fetch_listing returns a malloc'd buffer with newline-separated paths
             raw = self._lib.fdl_fetch_listing(self._handle, folder.encode())
+            if self._abort:
+                break
             if not raw:
                 self.sig_log.emit(f"  ✗ Failed to list {folder}", "#ff6b6b")
                 continue
             try:
                 listing_bytes = ctypes.string_at(raw)
-                # Free the C buffer
-                ctypes.cast(raw, ctypes.c_void_p).value = 0  # actually need libc free; safer: call fdl_free_buffer if exists
-                # Parse lines
+                ctypes.cast(raw, ctypes.c_void_p).value = 0
                 files_found = []
+                pat_lower = pattern.lower() if pattern else ""
                 for line in listing_bytes.decode('utf-8', errors='replace').splitlines():
                     line = line.strip()
                     if not line:
                         continue
-                    if prefix:
-                        # Filter by prefix (filename part only)
-                        fname = line.split('/')[-1]
-                        if not fname.startswith(prefix):
+                    if pat_lower:
+                        fname = line.split('/')[-1].lower()
+                        if not fnmatch.fnmatchcase(fname, pat_lower):
                             continue
                     files_found.append(line)
                 expanded.extend(files_found)
@@ -312,7 +317,15 @@ class DownloadWorker(QThread):
 
         # ── Expand patterns ────────────────────────────────────────────────────
         file_list = self._expand_paths()
+        if self._abort:
+            lib.fdl_destroy(self._handle)
+            self._handle = None
+            self.sig_log.emit("Stopped.", "#f0a500")
+            self.sig_done.emit(self._done, self._errors, 0, time.time() - t0)
+            return
         if not file_list:
+            lib.fdl_destroy(self._handle)
+            self._handle = None
             self.sig_log.emit("No files matched the given paths/patterns.", "#ff6b6b")
             self.sig_done.emit(0, 0, 0, time.time() - t0)
             return

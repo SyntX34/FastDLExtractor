@@ -46,7 +46,7 @@ static void enableUtf8Console() {
 static void printBanner() {
     std::cout << "\n";
     std::cout << "+------------------------------------------------------------------+\n";
-    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.2           |\n";
+    std::cout << "|           FastDL Tool  --  Game File Downloader  v1.3           |\n";
     std::cout << "|           Windows + Linux  |  MinGW / GCC  |  C++17             |\n";
     std::cout << "|   Author: SyntX | https://github.com/SyntX34/FastDLExtractor    |\n";
     std::cout << "+------------------------------------------------------------------+\n\n";
@@ -64,6 +64,7 @@ static void printHelp(const char* argv0) {
     std::cout << "  -v, --version          Version info\n\n";
     std::cout << "Config download_paths modes:\n";
     std::cout << "  Folders   : \"maps/\"              -- crawl & sync entire folder\n";
+    std::cout << "  Wildcard  : \"models/*.mdl\"       -- all .mdl files in models/ (recursive)\n";
     std::cout << "  Prefix    : \"maps/zm_*\"          -- only files starting with zm_ in maps folder\n";
     std::cout << "  Files     : \"maps/de_dust2.bsp\"  -- specific files only\n";
     std::cout << "  (empty)   : crawl all resource-type folders from FastDL root\n\n";
@@ -76,7 +77,7 @@ static void printHelp(const char* argv0) {
 }
 
 static void printVersion() {
-    std::cout << "FastDL Tool  v1.2\n";
+    std::cout << "FastDL Tool  v1.3\n";
     std::cout << "Built with C++17 | CMake | MinGW/GCC\n";
     std::cout << "MIT License\n";
 }
@@ -333,23 +334,47 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-     std::vector<std::pair<std::string, std::string>> folderEntries; // <folder, prefix>
+     auto wildcardMatch = [](const std::string& str, const std::string& pat) -> bool {
+         size_t s = 0, p = 0, starIdx = std::string::npos, match = 0;
+         while (s < str.size()) {
+             if (p < pat.size() && (pat[p] == '?' ||
+                 std::tolower(static_cast<unsigned char>(pat[p])) ==
+                 std::tolower(static_cast<unsigned char>(str[s])))) {
+                 ++s;
+                 ++p;
+             } else if (p < pat.size() && pat[p] == '*') {
+                 starIdx = p++;
+                 match = s;
+             } else if (starIdx != std::string::npos) {
+                 p = starIdx + 1;
+                 s = ++match;
+             } else {
+                 return false;
+             }
+         }
+         while (p < pat.size() && pat[p] == '*') ++p;
+         return p == pat.size();
+     };
+
+     std::vector<std::pair<std::string, std::string>> folderEntries; // <folder, wildcard_pattern>
      std::vector<std::string> fileEntries;
      std::vector<std::string> expandedFiles;
 
      for (const auto& p : configPaths) {
          if (p.empty()) continue;
          if (p.back() == '/') {
-             folderEntries.emplace_back(p, ""); // folder, no prefix
-         } else {
+             folderEntries.emplace_back(p, ""); // folder, no pattern
+         } else if (p.find('*') != std::string::npos || p.find('?') != std::string::npos) {
              size_t lastSlash = p.find_last_of('/');
-             if (lastSlash != std::string::npos && p.back() == '*') {
+             if (lastSlash != std::string::npos) {
                  std::string folder = p.substr(0, lastSlash + 1);
-                 std::string prefix = p.substr(lastSlash + 1, p.size() - lastSlash - 2); // remove the '*'
-                 folderEntries.emplace_back(folder, prefix);
+                 std::string pattern = p.substr(lastSlash + 1);
+                 folderEntries.emplace_back(folder, pattern);
              } else {
-                 fileEntries.push_back(p);
+                 folderEntries.emplace_back("", p);
              }
+         } else {
+             fileEntries.push_back(p);
          }
      }
 
@@ -358,17 +383,17 @@ int main(int argc, char* argv[]) {
      if (!folderEntries.empty()) {
          std::cout << "\n  Crawling " << folderEntries.size()
                    << " folder(s) on FastDL server...\n";
-         for (const auto& [folder, prefix] : folderEntries) {
+         for (const auto& [folder, pattern] : folderEntries) {
              std::cout << "    Listing: " << chosen.fastdlUrl << folder << " ... ";
              std::cout.flush();
              auto found = dl.fetchDirectoryListing(folder);
-             if (!prefix.empty()) {
+             if (!pattern.empty()) {
                  auto it = std::remove_if(found.begin(), found.end(),
                      [&](const std::string& f) {
                          size_t slash = f.find_last_of('/');
-                         const std::string& name = (slash != std::string::npos)
-                                                   ? f.substr(slash + 1) : f;
-                         return name.find(prefix) != 0;
+                         std::string name = (slash != std::string::npos)
+                                            ? f.substr(slash + 1) : f;
+                         return !wildcardMatch(name, pattern);
                      });
                  found.erase(it, found.end());
              }

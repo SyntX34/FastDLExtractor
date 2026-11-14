@@ -44,6 +44,8 @@ public:
     std::vector<std::string> fetchDirectoryListing(const std::string& relativeDir);
 
     void waitAll();
+    void cancel();
+    bool isCancelled() const { return m_cancelled.load(std::memory_order_relaxed); }
 
     size_t totalBytesDownloaded() const { return m_totalBytes.load(); }
     size_t totalFilesDownloaded() const { return m_totalFiles.load(); }
@@ -70,6 +72,7 @@ private:
     std::condition_variable   m_cv;
     std::condition_variable   m_doneCv;
     bool                      m_shutdown  = false;
+    std::atomic<bool>         m_cancelled{false};
     int                       m_inFlight  = 0;
 
     std::atomic<size_t> m_totalBytes{0};
