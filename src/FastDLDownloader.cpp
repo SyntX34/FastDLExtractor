@@ -256,15 +256,21 @@ std::vector<std::string> FastDLDownloader::parseHtmlLinks(
         const std::string& baseHref) const {
 
     std::vector<std::string> links;
-    std::string lower = html;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    static const char kHref[] = "href=";
 
     size_t pos = 0;
-    while (true) {
-        size_t hrefPos = lower.find("href=", pos);
-        if (hrefPos == std::string::npos) break;
+    while (pos < html.size()) {
+        auto it = std::search(
+            html.begin() + pos, html.end(),
+            kHref, kHref + 5,
+            [](char a, char b) {
+                return std::tolower(static_cast<unsigned char>(a)) == b;
+            });
+        if (it == html.end()) break;
 
+        size_t hrefPos = static_cast<size_t>(it - html.begin());
         pos = hrefPos + 5;
+        if (pos >= html.size()) break;
         char quote = html[pos];
         if (quote != '"' && quote != '\'') continue;
 
@@ -448,7 +454,7 @@ static bool winHttpOpenRequest(const std::string& url,
     std::wstring hostStr(host);
 
     if (!tls_conn.hSession) {
-        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.2",
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.4",
                                         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                         WINHTTP_NO_PROXY_NAME,
                                         WINHTTP_NO_PROXY_BYPASS, 0);
@@ -470,7 +476,7 @@ static bool winHttpOpenRequest(const std::string& url,
                                    WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (!hRequest) {
         tls_conn.reset();
-        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.2",
+        tls_conn.hSession = WinHttpOpen(L"FastDLTool/1.4",
                                         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                         WINHTTP_NO_PROXY_NAME,
                                         WINHTTP_NO_PROXY_BYPASS, 0);
@@ -636,8 +642,21 @@ static int curlProgress(void* ud, curl_off_t dlTotal, curl_off_t dlNow,
     return 0;
 }
 
+struct CurlHandlePool {
+    CURL* handle = nullptr;
+    ~CurlHandlePool() {
+        if (handle) curl_easy_cleanup(handle);
+    }
+    CURL* get() {
+        if (!handle) handle = curl_easy_init();
+        else curl_easy_reset(handle);
+        return handle;
+    }
+};
+static thread_local CurlHandlePool tls_curl;
+
 bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
-    CURL* curl = curl_easy_init();
+    CURL* curl = tls_curl.get();
     if (!curl) return false;
 
     CurlWriteState ws;
@@ -648,12 +667,11 @@ bool FastDLDownloader::httpFetch(const std::string& url, std::string& body) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &ws);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,       8L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.2");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT,     "FastDLTool/1.4");
 
     CURLcode res = curl_easy_perform(curl);
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
 
     return (res == CURLE_OK && http_code == 200 && !body.empty());
 }

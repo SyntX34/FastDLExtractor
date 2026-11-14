@@ -1,4 +1,4 @@
-FastDL Tool · Game File Downloader · v1.3
+FastDL Tool · Game File Downloader · v1.4
 Windows + Linux | MinGW / GCC | C++17
 Author: SyntX · github.com/SyntX34/FastDLExtractor
 
